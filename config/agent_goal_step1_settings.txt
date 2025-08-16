@@ -1,0 +1,6 @@
+Sukurk/atnaujink:
+1) backend/app/settings.py (Pydantic BaseSettings: DEFAULT_CURRENCY="NOK", DEFAULT_VAT=0.25, DEFAULT_HOURLY_RATE=500.0, DEFAULT_OVERHEAD_PCT=0.10, DEFAULT_PROFIT_PCT=0.10, NO_PRICING_MODE bool). Eksportuok get_settings().
+2) Pajunk settings į backend/app/services/recalc.py ir backend/app/api/estimate/update.py, kad reikšmės ateitų iš settings, o ne hardcodintos.
+3) Sukurk config/.env.example su šiais raktiniais.
+4) Pridėk tests/estimate/test_settings_smoke.py kuris tikrina, kad DEFAULT_CURRENCY=="NOK" ir kad update naudoja vat_pct iš request jei pateikta, kitaip iš settings.
+Grąžink 'files' (action: write, pilni turiniai) ir 'commands': ['pytest -q'].

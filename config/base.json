@@ -1,0 +1,7 @@
+{
+  "currency": "NOK",
+  "default_hourly_rate": 500,
+  "default_overhead_pct": 0.10,
+  "default_profit_pct": 0.10,
+  "default_vat_pct": 0.25
+}

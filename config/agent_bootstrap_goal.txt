@@ -1,0 +1,6 @@
+Sukurk VEIKIANTĮ minimumą:
+- backend/app/api/health.py su GET /healthz ir GET /readyz (v1 ir legacy), testai tests/estimate/test_health.py
+- backend/app/api/estimate/analyze.py su POST/GET kaip dabar, backend/app/api/estimate/update.py palik kaip yra
+- jeigu trūksta __init__.py, sukurk
+- paleisk 'make test'
+Grąžink JSON su 'files' (action: write) ir 'commands': ['make test'].

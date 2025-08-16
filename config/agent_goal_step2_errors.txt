@@ -1,0 +1,5 @@
+Sukurk/atnaujink:
+1) backend/app/errors.py: pridėk handler’ius HTTPException, RequestValidationError ir generic Exception, kad grąžintų JSON {code, message, details, trace_id}.
+2) Pajunk handler’ius backend/app/main.py.
+3) Pridėk tests/estimate/test_errors.py su atvejais: neigiami kiekiai, PVM > 1, tušti sąrašai → 422 su vieninga error forma.
+Grąžink 'files' (action: write) ir 'commands': ['pytest -q'].

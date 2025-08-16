@@ -1,0 +1,5 @@
+Atnaujink schemas ir validaciją:
+1) backend/app/schemas/estimate.py: Material praplėsk laukais unit: Literal['pcs','m2','m3','m'] (arba panašus), optional unit_price (float).
+2) Įdėk validaciją: quantity >=0, hours >=0, vat_pct 0..1, profit/overhead 0..1, jei unit_price <0 → 422.
+3) Testai: tests/estimate/test_units_validation.py – keli scenarijai su blogais vienetais ir neigiamom kainom.
+Grąžink 'files' ir 'commands': ['pytest -q'].

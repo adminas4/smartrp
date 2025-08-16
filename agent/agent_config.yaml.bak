@@ -1,0 +1,14 @@
+model: ${OPENAI_MODEL:-gpt-4.1-mini}
+root_dir: .
+write_whitelist:
+  - backend/app/api/estimate
+  - backend/app/services
+  - frontend/src/modules/estimate
+allowed_commands:
+  - pytest -q
+  - ruff .
+  - black --check .
+  - uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+  - npm run build --prefix frontend
+max_tokens: 6000
+temperature: 0.2

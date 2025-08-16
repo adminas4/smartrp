@@ -1,0 +1,8 @@
+Sukurk React stubą:
+- failas: frontend/src/modules/estimate/EstimateDemo.tsx
+- komponentas atlieka:
+  * POST /api/v1/estimate/analyze su {description,currency:"NOK"} ir užpildo formą
+  * POST /api/v1/estimate/update su {materials,workflow,vat_pct,pricing}
+  * atvaizduoja totals, grand_total, warnings
+- naudok fetch, be papildomų lib
+Grąžink JSON su 'files' (action: write) ir 'commands': ['npm run build --prefix frontend'].
