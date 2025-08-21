@@ -1,15 +1,15 @@
-import json
 from fastapi.testclient import TestClient
 from backend.app.main import app
 
 client = TestClient(app)
 
+
 def test_update_override_labor_hour_no_vat():
     payload = {
         "materials": [{"name": "X", "quantity": 10}],  # materials_sum = 10 * 10 = 100
-        "workflow": [{"task": "Y", "hours": 2}],       # labor_sum = 2 * 400 = 800
+        "workflow": [{"task": "Y", "hours": 2}],  # labor_sum = 2 * 400 = 800
         "vat_pct": 0.0,
-        "pricing": {"labor_hour": 400.0}
+        "pricing": {"labor_hour": 400.0},
     }
     r = client.post("/api/v1/estimate/update", json=payload)
     assert r.status_code == 200
@@ -25,17 +25,18 @@ def test_update_override_labor_hour_no_vat():
     assert j["grand_total"] == 1089.0
     assert j["rates_used"]["default_hourly_rate"] == 400.0
 
+
 def test_update_override_all_params_with_vat():
     payload = {
-        "materials": [{"name": "A", "quantity": 12}],    # 12 * 12.5 = 150
-        "workflow": [{"task": "B", "hours": 8}],         # 8 * 450   = 3600
+        "materials": [{"name": "A", "quantity": 12}],  # 12 * 12.5 = 150
+        "workflow": [{"task": "B", "hours": 8}],  # 8 * 450   = 3600
         "vat_pct": 0.25,
         "pricing": {
             "material_unit": 12.5,
             "labor_hour": 450.0,
             "overhead_pct": 0.08,
-            "profit_pct": 0.12
-        }
+            "profit_pct": 0.12,
+        },
     }
     r = client.post("/api/v1/estimate/update", json=payload)
     assert r.status_code == 200

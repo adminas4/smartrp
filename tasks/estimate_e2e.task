@@ -1,0 +1,58 @@
+UŽDUOTIS: Užbaigti SmartRP „Estimate Analyze“ modulį E2E (backend + frontend), kad veiktų be mock.
+
+DEFINITION OF DONE (privaloma):
+1) POST /api/estimate/analyze priima {description, custom_fields?} ir grąžina galiojantį JSON pagal EstimateResult schemą.
+2) POST /api/estimate/recalculate priima vartotojo paredaguotas lenteles (EstimateResult) ir grąžina atnaujintą rezultatą.
+3) Frontend (frontend/src/modules/estimate): esamas UI maketas prijungtas prie realių endpointų (fetch + loading/error).
+4) Visi skaičiai NOK; vienetai normalizuojami („m“, „m²“, „m³“, „vnt“).
+5) Testai: pytest unit + 1 contract (golden) + 1 E2E per httpx. `pytest -q` turi praeiti.
+6) „JSON only“ guardrails iš AI (1 retry, jei Pydantic validacija nepraeina).
+7) Feature flag: features.estimate_ai=true (config).
+8) Logai: request_id, trukmė, token_usage, validation_errors.
+
+APRIBOJIMAI:
+- Rašyti tik į write_whitelist katalogus.
+- Naudoti tik allowed_commands.
+- Griežtai laikytis Pydantic modelių ir OpenAPI.
+
+STRUKTŪRA IR FAILAI (sukurti/atnaujinti):
+- backend/app/schemas/estimate.py
+  - Pydantic: Material, WorkflowItem, WorkTimeItem, CrewItem, ToolItem, PricelistItem, EstimateResult.
+- backend/app/services/ai_estimate.py
+  - `analyze_description(description: str, custom_fields: dict|None) -> EstimateResult`
+  - `recalculate(result: EstimateResult) -> EstimateResult`
+  - OpenAI klientas: JSON-only, 1 retry; validacija per pydantic.
+- backend/app/routes/estimate.py
+  - FastAPI router su 2 endpointais; įtraukti į main.
+- tests/estimate/test_estimate_contract.py
+  - Golden pavyzdys (minimalus) + neigiamas (blogas JSON iš AI -> retry -> sėkmė).
+- config/features.yaml
+  - `features: { estimate_ai: true }`
+- frontend/src/modules/estimate/
+  - `api.ts` (fetch analizės/recalc), `types.ts` (sinchronizuota su backend schema), atnaujinti esamą UI, kad naudotų api.ts.
+
+AI PROMPT (services/ai_estimate.py):
+- System: „Tu – sąmatų analitikas Norvegijos statyboms. Grąžink TIK VALIDŲ JSON pagal duotą schemą. Jokio papildomo teksto.“
+- User: {description, custom_fields, JSON Schema (iš Pydantic .schema_json())}
+- Constraints: valiuta NOK; jei kaina nežinoma, `unit_price_nok` omit; vienetai normalizuoti.
+
+VALIDACIJA:
+- Pirmas parsavimas -> jei ValidationError, formuoti trumpą „fix JSON exactly, here are errors: …“ ir siųsti 1 retry.
+- Jei 2 kartus nepavyksta: grąžinti skeletą su tuščiomis lentelėmis ir `notes="validation_failed"`.
+
+NORMALIZACIJA:
+- UnitNormalizer: žeminti į m, m², m³, vnt (map nuo įvairių įrašų).
+- Currency helper: formatavimas per UI; backend tik skaičiai.
+
+VEIKSMAI:
+1) Sugeneruok schemas/estimate.py su Pydantic modeliais ir .schema_json() helperiu.
+2) Implementuok services/ai_estimate.py su OpenAI kvietimu (JSON-only), retry, validacija, normalizatoriumi.
+3) Sukurk routes/estimate.py ir suregistruok į main.
+4) Parašyk tests/estimate/test_estimate_contract.py (golden + negatyvus).
+5) Sukurk config/features.yaml ir panaudok jį services (jei false – grąžink stub skeletą).
+6) Frontend: sukurk api.ts (fetch į abu endpoints), types.ts (tipai), atnaujink esamą UI kad vietoje mock kviestų API ir rodyti loading/error.
+7) Paleisk `ruff .`, `black --check .`, `pytest -q`, `npm run build --prefix frontend`. Ištaisyti klaidas.
+
+PABAIGOJE:
+- Pateik diff santrauką (svarbiausių failų).
+- Nurodyk paleidimo seką ir curl pavyzdžius.

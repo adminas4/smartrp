@@ -1,0 +1,6 @@
+TIKSLAS: Sukurti /docs/runbook.md su:
+- Kaip paleisti lokaliai, kaip restartinti systemd.
+- Kaip panaudoti agentą (užduotys, ribojimai, whitelist).
+- Curl pavyzdžiai analyze/recalculate.
+
+PABAIGOJE: atnaujinti state_log.md („Darbai dabar“ → pažymėti).

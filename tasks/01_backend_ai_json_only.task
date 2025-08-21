@@ -1,0 +1,7 @@
+TIKSLAS: Užbaigti OpenAI JSON-only integraciją `backend/app/services/ai_estimate.py`:
+- Užpildyti `_call_openai_json_only` su Responses API (response_format=json_object).
+- Įdėti 1–2 retry, jei `ValidationError` arba nepavyksta ištraukti `output_text`.
+- Normalizuoti vienetus (m, m², m³, vnt) ir palikti NOK.
+- Nieko kito nekeisti, kad `pytest -q` išliktų žalias.
+
+PABAIGOJE: paleisti `ruff check . --fix`, `black .`, `pytest -q`.

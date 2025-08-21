@@ -11,50 +11,44 @@ from backend.app.schemas.estimate import EstimateResult, Material, WorkTimeItem
 def _call_openai_json_only(system_prompt: str, user_payload: Dict[str, Any]) -> str:
     """
     Grąžina TIK JSON tekstą (string), sugeneruotą pagal pateiktą schemą.
-    Naudoja OpenAI Responses API su griežtu JSON formatavimu.
-
-    Pastaba: Jei SDK nėra arba nepavyksta ištraukti JSON, ši funkcija
-    pakels RuntimeError ir viršus (analyze_description) grąžins skeleton.
+    Naudoja OpenAI Chat Completions API su griežtu JSON formatavimu.
+    Jei SDK nėra / raktas nepaduotas / struktūra neaiški – keliama RuntimeError.
     """
     try:
-        # importuojam čia, kad moduolis nelūžtų jei SDK neįdėtas
+        # Importuojam tik čia, kad modulis neužlūžtų, jei SDK dar neįdiegtas
         from openai import OpenAI  # type: ignore
-    except Exception as e:  # SDK nėra – leiskim viršui suvaldyti
+    except Exception as e:
         raise RuntimeError(
-            "OpenAI SDK nepasiekiamas. Įdiekite `openai>=1.40.0`."
+            "OpenAI SDK nepasiekiamas. Įdiekite paketą `openai` (>=1.40.0)."
         ) from e
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY nėra nustatytas aplinkoje.")
 
+    model = os.getenv("OPENAI_MODEL", "gpt-4o")
+
     client = OpenAI(api_key=api_key)
-    resp = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-        input=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": json.dumps(user_payload)},
-        ],
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+    ]
+
+    # Griežtas JSON atsakymas
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,
         response_format={"type": "json_object"},
-        temperature=0.1,
-        max_output_tokens=2000,
+        temperature=0,
     )
 
-    # 1) patogus kelias (naujas SDK)
-    if getattr(resp, "output_text", None):
-        return resp.output_text  # type: ignore[return-value]
+    content = resp.choices[0].message.content
+    if not content:
+        raise RuntimeError("OpenAI grąžino tuščią atsakymą.")
 
-    # 2) atsarginis kelias – pabandom iš output struktūros
-    try:
-        for item in getattr(resp, "output", []) or []:
-            if getattr(item, "type", None) == "output_text" and getattr(
-                item, "text", None
-            ):
-                return item.text  # type: ignore[return-value]
-    except Exception:
-        pass
-
-    raise RuntimeError("Nepavyko ištraukti JSON teksto iš OpenAI atsakymo.")
+    # Patikriname, kad tai validus JSON (ir grąžiname tekstą)
+    json.loads(content)
+    return content
 
 
 def _normalize_unit(u: Optional[str]) -> Optional[str]:
@@ -120,7 +114,6 @@ class AIEstimateService:
             "schema": EstimateResult.json_schema_str(),
         }
 
-        last_err: Optional[Exception] = None
         raw: Optional[str] = None
         for _ in range(2):
             try:
@@ -131,8 +124,7 @@ class AIEstimateService:
                     m.unit = _normalize_unit(m.unit) or "vnt"
                 return result
             except (ValidationError, Exception) as e:
-                last_err = e
-                # paprašom modelio pataisyti JSON – antram bandymui
+                # Paprašom modelio pataisyti JSON – antram bandymui
                 payload = {
                     "fix": "fix JSON exactly to match schema, keep fields consistent, no extra text",
                     "schema": EstimateResult.json_schema_str(),
@@ -164,26 +156,18 @@ class AIEstimateService:
         material_unit = float(
             p.get("material_unit", AIEstimateService.DEFAULTS["material_unit"])
         )
-        hourly_rate = float(
-            p.get("labor_hour", AIEstimateService.DEFAULTS["labor_hour"])
-        )
+        hourly_rate = float(p.get("labor_hour", AIEstimateService.DEFAULTS["labor_hour"]))
         overhead_pct = float(
             p.get("overhead_pct", AIEstimateService.DEFAULTS["overhead_pct"])
         )
-        profit_pct = float(
-            p.get("profit_pct", AIEstimateService.DEFAULTS["profit_pct"])
-        )
-        vat = float(
-            AIEstimateService.DEFAULTS["vat_pct"] if vat_pct is None else vat_pct
-        )
+        profit_pct = float(p.get("profit_pct", AIEstimateService.DEFAULTS["profit_pct"]))
+        vat = float(AIEstimateService.DEFAULTS["vat_pct"] if vat_pct is None else vat_pct)
 
         materials_sum = _sum_materials_cost(result.materials, material_unit)
         labor_sum = round(_sum_labor_hours(result.work_time) * hourly_rate, 2)
         subtotal = round(materials_sum + labor_sum, 2)
         overhead = round(subtotal * overhead_pct, 2)
-        profit = round(
-            (subtotal + overhead) * profit_pct, 2
-        )  # nuo (subtotal + overhead)
+        profit = round((subtotal + overhead) * profit_pct, 2)  # nuo (subtotal + overhead)
         ex_vat = round(subtotal + overhead + profit, 2)
         vat_amount = round(ex_vat * vat, 2)
         grand_total = round(ex_vat + vat_amount, 2)

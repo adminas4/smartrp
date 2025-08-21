@@ -1,11 +1,24 @@
-model: ${OPENAI_MODEL:-gpt-4.1-mini}
+model: ${OPENAI_MODEL:-gpt-4o}
 root_dir: .
+
 write_whitelist:
+  # Backend – paslaugos, schemos, maršrutai
   - backend/app/services
   - backend/app/schemas
+  - backend/app/routes
+
+  # Jei agentui reikės įtraukti routerį į programą
+  - backend/app/main.py
+
+  # Testai
   - tests/estimate
+
+  # Frontend modulis
   - frontend/src/modules/estimate
+
+  # Konfigai (feature flag’ai ir pan.)
   - config
+
 allowed_commands:
   - pytest -q
   - ruff .
@@ -14,5 +27,10 @@ allowed_commands:
   - npm run build --prefix frontend
   - pip install -r requirements.txt
   - make test
+
 max_tokens: 6000
 temperature: 0.2
+
+# Pastaba:
+# Šioje konfigūracijoje nebenaudojame „protect_files“,
+# nes užfailų apsaugą atsakingas pre-commit hook.

@@ -1,0 +1,5 @@
+TIKSLAS: `frontend/src/modules/estimate` prijungti:
+- `recalculateEstimate(result, pricing, vat_pct)` → rodyti breakdown (materials_sum, labor_sum, subtotal, overhead, profit, ex_vat, vat_amount, grand_total).
+- Loading/error stovis, paprasti skaičių formatai (NOK).
+
+PABAIGOJE: `npm run build --prefix frontend`.

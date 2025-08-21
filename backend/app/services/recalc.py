@@ -2,6 +2,7 @@
 from backend.app.schemas.estimate import UpdateRequest
 from backend.app.services.config import load_base_config
 
+
 def recalculate_totals(update_request: UpdateRequest):
     cfg = load_base_config()
 
@@ -9,7 +10,11 @@ def recalculate_totals(update_request: UpdateRequest):
     hourly_rate = cfg["default_hourly_rate"]
     overhead_pct = cfg["default_overhead_pct"]
     profit_pct = cfg["default_profit_pct"]
-    vat_pct = update_request.vat_pct if update_request.vat_pct is not None else cfg["default_vat_pct"]
+    vat_pct = (
+        update_request.vat_pct
+        if update_request.vat_pct is not None
+        else cfg["default_vat_pct"]
+    )
     material_unit = 10.0  # demo bazė, kol neturim kainyno faile
 
     # override'ai iš užklausos (jei pateikti)
@@ -25,7 +30,9 @@ def recalculate_totals(update_request: UpdateRequest):
             material_unit = pr.material_unit
 
     # skaičiavimai
-    materials_sum = sum(item.quantity * material_unit for item in update_request.materials)
+    materials_sum = sum(
+        item.quantity * material_unit for item in update_request.materials
+    )
     labor_sum = sum(step.hours * hourly_rate for step in update_request.workflow)
 
     subtotal = materials_sum + labor_sum
@@ -51,6 +58,6 @@ def recalculate_totals(update_request: UpdateRequest):
             "default_overhead_pct": overhead_pct,
             "default_profit_pct": profit_pct,
             "default_vat_pct": vat_pct,
-            "material_unit_demo": material_unit
-        }
+            "material_unit_demo": material_unit,
+        },
     }

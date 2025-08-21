@@ -1,115 +1,109 @@
-from typing import List, Optional, Dict, Literal
-from pydantic import BaseModel, field_validator, conint
+from typing import List, Optional, Dict, Any, Literal
+from pydantic import BaseModel, Field, conint, confloat
 
+# --- Result schema ---
 
-# --- Esami modeliai (su validacija) ---
 
 class Material(BaseModel):
     name: str
-    quantity: conint(ge=0)  # kiekis >= 0
-    # pasirenkami laukai: vienetai ir vieneto kaina (jei kada reikės)
-    unit: Optional[Literal["pcs", "m2", "m3", "m"]] = None
-    unit_price: Optional[float] = None
+    # Priimam ir naują "qty", ir seną "quantity" per alias
+    qty: confloat(gt=0) = Field(..., alias="quantity", description="Kiekis")
+    # Leidžiami vienetai; neteisingi (pvz., "kg") turi kelti ValidationError
+    unit: Literal["m", "m²", "m³", "vnt", "pcs"]
+    # Priimam naują "unit_price_nok" ir seną "unit_price" per alias
+    unit_price_nok: Optional[confloat(ge=0)] = Field(default=None, alias="unit_price")
+    notes: Optional[str] = None
 
-    @field_validator("unit_price")
-    @classmethod
-    def _non_negative_unit_price(cls, v):
-        if v is None:
-            return v
-        if v < 0:
-            raise ValueError("unit_price negali būti neigiamas")
-        return v
+    # Pydantic v2 konfigūracija
+    model_config = {
+        "populate_by_name": True,  # leidžia pildyti pagal field name (ne tik alias)
+        "extra": "allow",  # ignoruoja nenumatytus laukus iš senų testų
+    }
+
+    # Testų suderinamumui – senasis pavadinimas kaip property
+    @property
+    def unit_price(self) -> Optional[float]:
+        return self.unit_price_nok
 
 
-class Workflow(BaseModel):
+class WorkflowItem(BaseModel):
+    step: conint(ge=1)
     task: str
-    hours: conint(ge=0)  # valandos >= 0
+    depends_on: Optional[List[int]] = None
+    notes: Optional[str] = None
 
 
-class EstimateResponse(BaseModel):
-    currency: str
+class WorkTimeItem(BaseModel):
+    task: str
+    hours: confloat(gt=0)
+
+
+class CrewItem(BaseModel):
+    role: str
+    count: conint(ge=0)
+
+
+class ToolItem(BaseModel):
+    name: str
+    duration_h: Optional[confloat(ge=0)] = None
+
+
+class PricelistItem(BaseModel):
+    source: Optional[str] = None
+    ref: Optional[str] = None
+    note: Optional[str] = None
+
+
+class EstimateResult(BaseModel):
     materials: List[Material]
-    workflow: List[Workflow]
+    workflow: List[WorkflowItem]
+    work_time: List[WorkTimeItem]
+    crew: List[CrewItem]
+    tools: List[ToolItem]
+    pricelists: List[PricelistItem]
+    schema_version: str = "1.0.0"
 
-
-# --- Tarifų override'ai ---
-
-class PricingOverrides(BaseModel):
-    material_unit: Optional[float] = None      # NOK / vnt
-    labor_hour: Optional[float] = None         # NOK / h
-    overhead_pct: Optional[float] = None       # 0..1
-    profit_pct: Optional[float] = None         # 0..1
-
-    @field_validator("material_unit", "labor_hour")
     @classmethod
-    def _non_negative(cls, v):
-        if v is None:
-            return v
-        if v < 0:
-            raise ValueError("Kainos negali būti neigiamos")
-        return v
-
-    @field_validator("overhead_pct", "profit_pct")
-    @classmethod
-    def _pct_range(cls, v):
-        if v is None:
-            return v
-        if not (0.0 <= v <= 1.0):
-            raise ValueError("Procentai turi būti tarp 0.0 ir 1.0")
-        return v
+    def json_schema_str(cls) -> str:
+        # JSON Schema tekstas promptui
+        try:  # Pydantic v2
+            return str(cls.model_json_schema())
+        except Exception:  # Pydantic v1
+            return cls.schema_json(indent=2)
 
 
-class UpdateRequest(BaseModel):
-    materials: List[Material]
-    workflow: List[Workflow]
-    # pasirenkamas PVM, numatyta 25% (0.25). Galima siųsti 0..1
-    vat_pct: Optional[float] = 0.25
-    # override'ai (pasirenkami)
-    pricing: Optional[PricingOverrides] = None
-    # pasirenkamas profilio pavadinimas (jei naudosim profilius ateityje)
-    pricing_profile: Optional[str] = None
-
-    @field_validator("vat_pct")
-    @classmethod
-    def _vat_range(cls, v):
-        if v is None:
-            return v
-        if not (0.0 <= v <= 1.0):
-            raise ValueError("vat_pct turi būti tarp 0.0 ir 1.0")
-        return v
+# Kai kurie testai/legacy importai tikisi pavadinimo `EstimateResponse` — alias
+class EstimateResponse(EstimateResult):
+    pass
 
 
-class UpdateResponse(BaseModel):
-    currency: str
-    totals: float  # suderinamumui su esamais testais
+# --- Request schema expected by legacy tests/modules ---
 
-    # detalizuotas išskaidymas (nebūtini laukai)
-    materials_sum: Optional[float] = None
-    labor_sum: Optional[float] = None
-    overhead: Optional[float] = None
-    profit: Optional[float] = None
-
-    # prieš PVM ir po PVM
-    grand_total_ex_vat: Optional[float] = None
-    vat_pct: Optional[float] = None
-    vat_amount: Optional[float] = None
-    grand_total: Optional[float] = None  # po PVM
-
-    # metaduomenys
-    schema_version: Optional[str] = None
-    calc_id: Optional[str] = None
-    timestamp: Optional[int] = None
-    warnings: Optional[List[str]] = None
-    rates_used: Optional[Dict[str, float]] = None
-
-
-# --- Nauji modeliai POST /estimate/analyze įvedimui ---
 
 class EstimateAnalyzeRequest(BaseModel):
     description: str
-    custom_fields: Optional[Dict[str, str]] = None
-    currency: str = "NOK"  # numatyta valiuta
+    custom_fields: Optional[Dict[str, Any]] = None
 
 
-class AnalyzeMeta(BaseModel):
-    source: str = "mock"
+class EstimateUpdateRequest(BaseModel):
+    # legacy pavadinimas testuose; turinys – visas EstimateResult
+    result: EstimateResult
+
+
+# --- Legacy alias names to satisfy older imports/tests ---
+
+
+class AnalyzeRequest(EstimateAnalyzeRequest):
+    pass
+
+
+class AnalyzeResponse(EstimateResponse):
+    pass
+
+
+class UpdateRequest(EstimateUpdateRequest):
+    pass
+
+
+class UpdateResponse(EstimateResponse):
+    pass

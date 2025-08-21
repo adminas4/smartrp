@@ -1,5 +1,6 @@
 # tests/conftest.py
-import sys, os
+import sys
+import os
 
 # Į sys.path įdedam repo šaknį, kad importai kaip "from backend.app.main import app" veiktų
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

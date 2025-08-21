@@ -1,0 +1,35 @@
+Sukurk/atnaujink AI integraciją ANALYZE endpointui su saugiu fallback:
+
+1) backend/app/settings.py  -> Pydantic BaseSettings:
+   - DEFAULT_CURRENCY: str = "NOK"
+   - AI_ENABLED: bool = False
+   - AI_BASE_URL: str = ""          # pvz. "http://192.168.10.160:8001"
+   - AI_TIMEOUT: float = 8.0
+   Eksportuok funkciją get_settings() su @lru_cache.
+
+2) backend/app/services/ai_client.py -> sinchroninis klientas per httpx:
+   - funkcija analyze_with_ai(description: str, currency: str) -> dict
+   - ima base_url ir timeout iš settings
+   - POST į {AI_BASE_URL}/analyze su JSON {"description": ..., "currency": ...}
+   - tikisi grąžinti dict su raktiniais: {"currency": "NOK", "materials": [...], "workflow": [...]}
+   - jei klaida arba netinkamas formatas -> raise RuntimeError su aiškiu pranešimu
+
+3) backend/app/api/estimate/analyze.py:
+   - naudok settings.get_settings() ir ai_client.analyze_with_ai
+   - jei settings.AI_ENABLED == True ir AI_BASE_URL != "", bandyk AI
+     * pavykus: validuok į schemas ir grąžink
+     * nepavykus: pereik į fallback stub (kaip dabar), BE klaidos
+   - jei AI_ENABLED == False (default), grąžink fallback stub (kaip dabar)
+   - endpointai POST /api/v1/estimate/analyze ir POST /estimate/analyze lieka veikti kaip dabar (tik su AI bandymu)
+
+4) config/.env.example:
+   - DEFAULT_CURRENCY=NOK
+   - AI_ENABLED=false
+   - AI_BASE_URL=http://192.168.10.160:8001
+   - AI_TIMEOUT=8.0
+   (komentarai kaip užpildyti)
+
+5) tests/estimate/test_analyze_ai_fallback.py:
+   - testas, kuris patvirtina, kad kai AI_ENABLED false (default), POST /api/v1/estimate/analyze grąžina currency="NOK" ir bent po 1 materials/workflow įrašą.
+
+Grąžink JSON su 'files' (action: write, pilni turiniai) ir 'commands': ['pytest -q'].

@@ -12,6 +12,7 @@ DEFAULTS: Dict[str, float] = {
     "default_vat_pct": 0.25,
 }
 
+
 def _try_load_json(path: Path) -> Dict:
     try:
         if path.is_file():
@@ -20,6 +21,7 @@ def _try_load_json(path: Path) -> Dict:
         # Sugadintas failas – grįžtam prie DEFAULTS
         pass
     return {}
+
 
 def load_base_config() -> Dict:
     """

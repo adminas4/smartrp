@@ -40,6 +40,7 @@ TAISYKLĖS:
 - Jei negali įvykdyti užduoties, grąžink JSON su {"files":[], "commands":[], "notes":"klaidos ar priežasties paaiškinimas"}.
 """
 
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=8))
 def ask_agent(goal: str, context: str) -> Dict[str, Any]:
     """
@@ -67,7 +68,11 @@ def ask_agent(goal: str, context: str) -> Dict[str, Any]:
     # Iškerpam tik JSON dalį (saugiklis, jei vistiek kažką pridėjo)
     start_idx = content.find("{")
     end_idx = content.rfind("}")
-    json_text = content[start_idx:end_idx + 1] if (start_idx != -1 and end_idx != -1) else content
+    json_text = (
+        content[start_idx : end_idx + 1]
+        if (start_idx != -1 and end_idx != -1)
+        else content
+    )
 
     try:
         return json.loads(json_text)

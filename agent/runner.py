@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 
 from agent.ai_openai import ask_agent
 
+
 # --- Preflight: užtikrinam minimalią struktūrą ir priklausomybes ---
 def ensure_structure():
     """
@@ -25,8 +26,12 @@ def ensure_structure():
     try:
         import fastapi  # noqa: F401
     except Exception:
-        print("[Preflight] FastAPI nerastas — diegiam priklausomybes iš requirements.txt ...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        print(
+            "[Preflight] FastAPI nerastas — diegiam priklausomybes iš requirements.txt ..."
+        )
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+        )
 
 
 ensure_structure()
@@ -45,13 +50,16 @@ PROTECTED_PATHS = [
     (ROOT / "backend/app/api/health.py").resolve(),
 ]
 
+
 def is_in_whitelist(path: pathlib.Path) -> bool:
     rp = path.resolve()
     return any(str(rp).startswith(str(w)) for w in WRITE_WHITELIST)
 
+
 def is_protected(path: pathlib.Path) -> bool:
     rp = path.resolve()
     return any(str(rp) == str(p) for p in PROTECTED_PATHS)
+
 
 def apply_write(path: pathlib.Path, content: str, action: str):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +77,7 @@ def apply_write(path: pathlib.Path, content: str, action: str):
     else:
         raise ValueError(f"Nežinomas action: {action}")
 
+
 def run_allowed(cmd: str) -> int:
     cmd = cmd.strip()
     # Leidžiam pagal pirmą žodį (pvz., 'pytest', 'ruff', 'uvicorn', 'npm', 'pip', 'make')
@@ -80,6 +89,7 @@ def run_allowed(cmd: str) -> int:
     proc = subprocess.run(shlex.split(cmd), cwd=str(ROOT))
     return proc.returncode
 
+
 def repo_map() -> str:
     # Aprašome tik whitelist katalogus (trumpas žemėlapis), ignoruojant neegzistuojančius
     lines = []
@@ -88,13 +98,16 @@ def repo_map() -> str:
             if not w.exists():
                 continue
             for p in w.rglob("*"):
-                if p.is_file() and p.stat().st_size < 200_000:  # nekeliam milžiniškų failų
+                if (
+                    p.is_file() and p.stat().st_size < 200_000
+                ):  # nekeliam milžiniškų failų
                     rel = p.relative_to(ROOT)
                     lines.append(f"- {rel}")
         except Exception:
             # Jei kas nors nepavyksta skaityti (teisės ir pan.) — praleidžiam
             continue
     return "Failų žemėlapis (whitelisted):\n" + "\n".join(lines[:500])
+
 
 def main():
     if len(sys.argv) < 2:
@@ -126,6 +139,7 @@ def main():
     print("Viskas! Agentas baigė šį žingsnį.")
     if "notes" in plan:
         print("Pastabos:", plan["notes"])
+
 
 if __name__ == "__main__":
     main()

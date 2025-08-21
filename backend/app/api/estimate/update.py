@@ -1,50 +1,44 @@
-import time
-import uuid
-from fastapi import APIRouter
-from backend.app.schemas.estimate import UpdateRequest, UpdateResponse
-from backend.app.services.recalc import recalculate_totals
+# backend/app/api/estimate/update.py
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Body
+
+from backend.app.schemas.estimate import EstimateResult
+from backend.app.services.ai_estimate import AIEstimateService
 
 router = APIRouter()
 
-@router.post(
-    "/update",
-    response_model=UpdateResponse,
-    response_model_exclude_none=True,
-    summary="Recalculate estimate totals",
-    description=(
-        "Apskaičiuoja sąmatos suvestines pagal pateiktas medžiagas, darbo žingsnius ir pasirenkamus "
-        "tarifų override’us (`pricing`). Numatyta valiuta: **NOK**. "
-        "PVM (`vat_pct`) leidžiamas intervale **0.0..1.0**."
-    ),
-)
-def update_estimate(update_request: UpdateRequest):
-    result = recalculate_totals(update_request)
 
-    # ---- papildytos įspėjimų taisyklės ----
-    warnings = []
-    if any(m.quantity == 0 for m in update_request.materials):
-        warnings.append("Some materials have 0 quantity.")
-    if any(w.hours == 0 for w in update_request.workflow):
-        warnings.append("Some workflow steps have 0 hours.")
+@router.post("/api/estimate/recalculate")
+def recalculate_estimate(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """
+    Priima JSON:
+      {
+        "result": <EstimateResult>,
+        "pricing": {...}?,   # optional overrides: material_unit, labor_hour, overhead_pct, profit_pct
+        "vat_pct": 0.25?     # optional [0..1]
+      }
 
-    # Anomalijų patikros pagal rezultatą
-    ex_vat = result.get("grand_total_ex_vat", 0) or 0
-    mat = result.get("materials_sum", 0) or 0
-    lab = result.get("labor_sum", 0) or 0
-    vat_pct = result.get("vat_pct", None)
+    Grąžina breakdown suderintą su legacy v1/update: materials_sum, labor_sum, subtotal,
+    overhead, profit, ex_vat, vat_amount, grand_total, grand_total_ex_vat, total_ex_vat,
+    rates_used{... alias'ai}, currency="NOK".
+    """
+    # Parse ir validuojame visą sąmatą pagal mūsų Pydantic schemą:
+    result = EstimateResult.model_validate(payload.get("result", {}))
+    pricing: Optional[Dict[str, Any]] = payload.get("pricing")
+    vat_pct: Optional[float] = payload.get("vat_pct")
 
-    if ex_vat > 1_000_000:
-        warnings.append("Grand total (ex VAT) is unusually high (> 1,000,000 NOK).")
-    if mat > 0 and lab / mat > 10:
-        warnings.append("Labor-to-materials ratio is unusually high (> 10x).")
-    if vat_pct == 0:
-        warnings.append("VAT is set to 0%. Confirm tax handling.")
+    # Skaičiavimas
+    return AIEstimateService.recalculate(result, pricing, vat_pct)
 
-    # Įdedam metaduomenis
-    result.update({
-        "schema_version": "1.0",
-        "calc_id": str(uuid.uuid4()),
-        "timestamp": int(time.time()),
-        "warnings": warnings or None,
-    })
-    return result
+
+# --- Pasirinktinai: legacy trumpas kelias /update (jei kažkas dar kviečia seną endpoint'ą) ---
+@router.post("/update")
+def update_estimate_legacy(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """
+    Legacy alias į tą pačią logiką. Priima tą patį JSON kaip ir /api/estimate/recalculate.
+    """
+    result = EstimateResult.model_validate(payload.get("result", {}))
+    pricing: Optional[Dict[str, Any]] = payload.get("pricing")
+    vat_pct: Optional[float] = payload.get("vat_pct")
+    return AIEstimateService.recalculate(result, pricing, vat_pct)

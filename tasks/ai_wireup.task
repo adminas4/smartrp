@@ -1,0 +1,38 @@
+UŽDUOTIS: Užbaigti SmartRP Estimate modulį su realia AI analize ir perskaičiavimu (be mock), nepažeidžiant esamų testų.
+
+DEFINITION OF DONE:
+1) backend/app/services/ai_estimate.py:
+   - analyze_description(description:str, custom_fields:dict|None) -> EstimateResult:
+     * Kviečia OpenAI JSON-only režimu su schema (EstimateResult.json_schema_str()).
+     * 1–2 retry: jei Pydantic validacija krenta, siųsk "fix JSON exactly..." ir bandyk dar kartą.
+     * Normalizuoja vienetus į: m, m², m³, vnt; valiuta – NOK; kai kaina nežinoma – omit laukai.
+   - recalculate(result: EstimateResult, pricing_overrides: dict|None, vat_pct: float|None) -> dict:
+     * Apskaičiuoja: materials_sum, labor_sum, subtotal, overhead, profit, ex_vat, vat_amount, grand_total.
+     * Grąžina ir "rates_used" su default/override’ais; suderinta su legacy v1/update (įskaitant default_hourly_rate, default_overhead_pct, default_profit_pct, default_material_unit).
+2) backend/app/api/estimate/analyze.py:
+   - POST /api/estimate/analyze:
+     * jei description=="Invalid JSON" – palik esamą skeleto grąžinimą;
+     * kitu atveju kviesk services.ai_estimate.analyze_description ir grąžink EstimateResponse.
+3) backend/app/api/estimate/update.py:
+   - POST /api/estimate/recalculate:
+     * priima {result: EstimateResult, pricing?: {...}, vat_pct?: float}
+     * kviečia services.ai_estimate.recalculate ir grąžina breakdown suderintą su legacy v1/update.
+4) Logai: įdėti paprastus json logus – request_id, trukmė, token_usage, validation_errors.
+5) Feature flag: jei features.estimate_ai=false – analyze grąžina minimalų stub; jei true – kviečia AI.
+6) Frontend:
+   - frontend/src/modules/estimate/api.ts: pridėti `recalculate` pagal naują endpoint (jei jo dar nėra).
+7) Turi praeiti: `pytest -q` ir `npm run build --prefix frontend`. Palikti veikiančius legacy route’us.
+
+APRIBOJIMAI:
+- Rašyti tik į write_whitelist katalogus (agent_config.yaml).
+- Naudoti allowed_commands.
+- Nekeisti jau praeinančių testų logikos; galima pridėti naujų unit testų services/ai_estimate.
+
+PASTABOS:
+- OpenAI klientas: naudoti env OPENAI_API_KEY ir OPENAI_MODEL (gpt-4o).
+- JSON-only: griežtas – joks papildomas tekstas.
+- Taupyti tokenus: siųsti tik schema + description/custom_fields.
+
+PABAIGOJE:
+- Pateikti failų diff santrauką (kuriuos keitė/kūrė).
+- Nurodyti paleidimo seką ir curl pavyzdžius.
