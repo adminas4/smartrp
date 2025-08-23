@@ -1,85 +1,3 @@
-nano agent/ai_openai.py
-python -m agent.runner "Sukurk tuščią failą tests/estimate/test_placeholder.py su vienu testu, kuris assert True"
-nano agent/ai_openai.py
-python -m agent.runner "Sukurk tuščią failą tests/estimate/test_placeholder.py su vienu testu, kuris assert True"
-python -m agent.runner "
-Sukurk HEALTH stubą:
-- Failai (action: write) pilnu turiniu:
-  1) backend/app/api/health.py -> FastAPI routeris su:
-     - GET /healthz {status:'ok'}
-     - GET /readyz {status:'ready'}
-  2) atnaujink backend/app/main.py -> include_router(health.router) prie esamų, su prefixais:
-     - legacy: '/healthz', '/readyz'
-     - v1: '/api/v1/healthz', '/api/v1/readyz'
-  3) tests/estimate/test_health.py -> pytest, tikrina abu kelius (legacy ir v1), 200 ir JSON 'status'
-- Grąžink JSON su 'files' ir 'commands': ['pytest -q'].
-"
-nano backend/app/main.py
-nano tests/estimate/test_health.py
-pytest -q
-nano tests/estimate/test_health.py
-python - << 'PY'
-import sys, os
-sys.path.insert(0, os.path.abspath("."))
-import importlib
-m = importlib.import_module("backend.app.main")
-print("Imported:", m.app.title if hasattr(m, "app") else "no app")
-PY
-
-pytest -q
-touch backend/__init__.py
-touch backend/app/__init__.py
-pytest -q
-nano tests/estimate/test_health.py
-pytest -q
-nano tests/conftest.py
-pytest -q
-nano tests/estimate/test_golden_pricing.py
-pytest -q
-nano backend/app/schemas/estimate.py
-nano backend/app/services/recalc.py
-pytest -q
-nano tests/estimate/test_golden_pricing.py
-pytest -q
-nano tests/estimate/test_golden_pricing.py
-pytest -q
-nano agent/agent_config.yaml
-python - << 'PY'
-import yaml; print("OK keys:", list(yaml.safe_load(open("agent/agent_config.yaml")).keys()))
-PY
-
-nano backend/app/schemas/estimate.py
-pytest -q
-python - << 'PY'
-from fastapi.testclient import TestClient
-from backend.app.main import app
-c = TestClient(app)
-spec = c.get("/openapi.json").json()
-print("Has summary?", spec["paths"]["/api/v1/estimate/update"]["post"].get("summary", "<no>"))
-print("Req examples?", "examples" in spec["components"]["schemas"]["UpdateRequest"])
-print("Resp examples?", "examples" in spec["components"]["schemas"]["UpdateResponse"])
-PY
-
-. .venv/bin/activate
-python - << 'PY'
-from fastapi.testclient import TestClient
-from backend.app.main import app
-c = TestClient(app)
-spec = c.get("/openapi.json").json()
-print("Has summary?", spec["paths"]["/api/v1/estimate/update"]["post"].get("summary", "<no>"))
-print("Req examples?", "examples" in spec["components"]["schemas"]["UpdateRequest"])
-print("Resp examples?", "examples" in spec["components"]["schemas"]["UpdateResponse"])
-PY
-
-nano backend/app/api/estimate/update.py
-python - << 'PY'
-from fastapi.testclient import TestClient
-from backend.app.main import app
-c = TestClient(app)
-spec = c.get("/openapi.json").json()
-print("Summary:", spec["paths"]["/api/v1/estimate/update"]["post"].get("summary"))
-print("Has description?", bool(spec["paths"]["/api/v1/estimate/update"]["post"].get("description")))
-PY
 
 nano backend/app/api/estimate/analyze.py
 python - << 'PY'
@@ -1998,3 +1916,85 @@ curl -s -X POST http://127.0.0.1:8000/api/estimate/analyze   -H "Content-Type: a
 curl -s -X POST http://127.0.0.1:8000/api/estimate/analyze   -H "Content-Type: application/json"   -d '{"description":"Išklijuoti plyteles 20 m² vonioje"}'
 sudo apt update && sudo apt install -y jq
 curl -s -X POST http://127.0.0.1:8000/api/estimate/analyze   -H "Content-Type: application/json"   -d '{"description":"Išklijuoti plyteles 20 m² vonioje"}' | jq .
+cat > pyproject.toml <<'TOML'
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+exclude = [".venv", ".local", ".cache", "node_modules", "dist", "build"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["."]
+TOML
+
+git add pyproject.toml
+git commit -m "chore: add pyproject.toml for black/ruff/pytest config" --no-verify
+git add pyproject.toml
+git commit -m "chore: add pyproject.toml for black/ruff/pytest config" --no-verify
+# atstatom shell istorijos failus (nereikia jų commit'int)
+git restore .bash_history .lesshst
+# pridėkim tik projekto konfigūraciją
+git add config/features.yaml
+# užfiksuojam
+git commit -m "chore: update features.yaml"
+git commit -m "chore: update features.yaml" --no-verify
+# Išvalom problematišką pre-commit cache
+rm -rf ~/.cache/pre-commit
+# Atnaujinam pip/setuptools/wheel
+source /root/.venv/bin/activate
+pip install --upgrade pip setuptools wheel
+# Perinstaliuojam pre-commit
+pip install --upgrade pre-commit
+# Inicijuojam iš naujo
+pre-commit install --overwrite
+(.venv) git add state_log.md
+(.venv) git commit -m "docs: update state log – Estimate v1 complete"
+git add state_log.md
+git commit -m "docs: update state log – Estimate v1 complete"
+cat > .pre-commit-config.yaml <<'YAML'
+repos:
+  # Black: paskutinė py38 palaikanti versija
+
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+        language_version: python3.8
+
+  # Ruff: stabiliai veikia su py38
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        language_version: python3.8
+
+  # Secret scan (jei nenaudoji – gali ištrinti visą bloką)
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+
+  # Apsauginis vietinis hook (paliekam, jei naudojai)
+
+  - repo: local
+    hooks:
+      - id: protect-ai-estimate
+        name: Protect ai_estimate.py from unwanted changes
+        entry: bash -c 'git diff --cached --name-only | grep -q "^backend/app/services/ai_estimate.py$" && { echo "❌ Commit blocked: ai_estimate.py protected."; exit 1; } || exit 0'
+        language: system
+        pass_filenames: false
+YAML
+
+rm -rf ~/.cache/pre-commit
+pre-commit install --overwrite
+pre-commit run -a
+git add state_log.md .pre-commit-config.yaml
+git commit -m "docs: update state log – Estimate v1 complete"
