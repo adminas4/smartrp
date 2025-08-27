@@ -1,0 +1,82 @@
+from __future__ import annotations
+import os, re, json, time, urllib.parse
+from typing import List, Dict, Any
+import httpx
+from bs4 import BeautifulSoup
+
+UA = os.getenv("PRICING_USER_AGENT","SmartRPPriceBot/1.0")
+TIMEOUT = float(os.getenv("PRICING_TIMEOUT_S","15"))
+MAX_OFFERS = int(os.getenv("PRICING_MAX_OFFERS","3"))
+NOK_ONLY = os.getenv("PRICING_NOK_ONLY","1") == "1"
+
+_PRICE_RE = re.compile(r'(?<!\d)(\d{2,3}(?:[ \u00A0]?\d{3})*)(?:\s*kr|,-| NOK)\b', re.I)
+
+def load_whitelist(path: str) -> List[str]:
+    import yaml
+    with open(path,"r") as f:
+        data = yaml.safe_load(f)
+    return [v["domain"] for v in (data.get("stores") or {}).values() if "domain" in v]
+
+def _search_urls(query: str, domains: List[str]) -> List[str]:
+    # Naudojam DuckDuckGo HTML be JS, filtruojam site:
+    urls=[]
+    headers={"User-Agent":UA}
+    with httpx.Client(headers=headers, timeout=TIMEOUT, follow_redirects=True) as c:
+        for d in domains:
+            q = f'site:{d} {query}'
+            r = c.get("https://duckduckgo.com/html/", params={"q":q})
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.select("a.result__a, a.result__url"):
+                href = a.get("href") or ""
+                # DDG grąžina /l/?kh=-1&uddg=<encoded>
+                if "uddg=" in href:
+                    try:
+                        href = urllib.parse.parse_qs(urllib.parse.urlsplit(href).query)["uddg"][0]
+                    except Exception:
+                        continue
+                if href.startswith("http"):
+                    urls.append(href)
+            time.sleep(0.2)
+    # dedup, paliekam tik whitelist domenus
+    seen=set(); out=[]
+    for u in urls:
+        netloc = urllib.parse.urlsplit(u).netloc.lower()
+        if any(netloc.endswith(d) for d in domains) and u not in seen:
+            seen.add(u); out.append(u)
+    return out[:MAX_OFFERS*3]  # kiek daugiau – jei kai kur kaina neras
+
+def _extract_price_nok(html: str) -> int|None:
+    # Imame pirmą NOK-ish kainą
+    m = _PRICE_RE.search(html)
+    if not m: return None
+    digits = re.sub(r'[^\d]', '', m.group(1))
+    try:
+        return int(digits)
+    except Exception:
+        return None
+
+def fetch_offers(item_query: str, domains: List[str]) -> List[Dict[str, Any]]:
+    headers={"User-Agent":UA}
+    urls = _search_urls(item_query, domains)
+    offers=[]
+    with httpx.Client(headers=headers, timeout=TIMEOUT, follow_redirects=True) as c:
+        for u in urls:
+            try:
+                r = c.get(u)
+                price = _extract_price_nok(r.text) if NOK_ONLY else None
+                if NOK_ONLY and price is None:
+                    continue
+                title = BeautifulSoup(r.text,"html.parser").title
+                title = (title.text.strip() if title else u)
+                offers.append({"title": title[:180], "url": u, "price_NOK": price})
+            except Exception:
+                continue
+            if len(offers) >= MAX_OFFERS:
+                break
+    return offers
+
+if __name__ == "__main__":
+    import sys, yaml
+    wl = load_whitelist(os.getenv("PRICING_WHITELIST","/srv/smartrp/pricing_whitelist.yaml"))
+    q = " ".join(sys.argv[1:]) or "gipskartonio plokštė 12.5 1200x2400"
+    print(json.dumps(fetch_offers(q, wl), ensure_ascii=False, indent=2))
