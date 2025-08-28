@@ -1,0 +1,3 @@
+# SmartRP
+
+Trumpas projekto aprašas…
