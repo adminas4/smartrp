@@ -31,3 +31,4 @@ build/
 # Caches
 .cache/
 .ssh/
+.gitconfig
