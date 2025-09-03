@@ -33,3 +33,19 @@ id_ecdsa
 
 
 frontend/node_modules/
+# secrets
+.env
+*.env
+backend/.env
+.bashrc
+
+# caches / venv / build
+frontend/node_modules/
+.npm/
+.local/
+.venv/
+__pycache__/
+dist/
+build/
+*.tgz
+*.log
