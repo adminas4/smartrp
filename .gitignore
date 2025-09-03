@@ -23,3 +23,13 @@ frontend/dist/
 config/*.env
 downloads/
 snap/
+
+# never commit secrets
+.env
+*.pem
+id_rsa
+id_ecdsa
+*.key
+
+
+frontend/node_modules/
