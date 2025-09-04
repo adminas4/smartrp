@@ -1,4 +1,4 @@
-from app.api import health as health_router
+from backend.app.api import health as health_router
 from __future__ import annotations
 
 from fastapi import FastAPI
