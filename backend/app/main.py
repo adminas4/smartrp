@@ -1,10 +1,12 @@
 from __future__ import annotations
+from backend.app.api import agent as agent_router
 
 from fastapi import FastAPI
 from backend.app.api import health as health_router
 from backend.app.api import progress as progress_router
 
 app = FastAPI(title="SmartRP API")
+app.include_router(agent_router.router)
 
 # Health routes
 app.include_router(health_router.router)
