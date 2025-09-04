@@ -75,3 +75,7 @@ def _extract_price_nok(html: str) -> Optional[int]:
         if 'kr' in s or 'nok' in s or 'pris' in s:
             return val
     return None
+
+
+def fetch_offers(query: str, domains: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    return []
