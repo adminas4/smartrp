@@ -16,6 +16,6 @@ async def pricing_suggest(body: Body) -> Dict[str, Any]:
     wl = load_whitelist()
     out = []
     for it in body.items:
-        offers = await fetch_offers(it.name, domains=wl)
+        offers = fetch_offers(it.name, domains=wl)
         out.append({"query": it.name, "offers": offers})
     return {"results": out}
