@@ -1,9 +1,0 @@
-header{position:relative}
-#logo-overlay{
-  position:absolute; left:14px; top:10px;
-  width:220px; height:52px;
-  background:url('/assets/logo-custom.png?v=1757428362') no-repeat left center / contain;
-  display:block; z-index:50;
-}
-header img, header svg, header a span{opacity:0 !important}
-@media(max-width:640px){ #logo-overlay{width:160px;height:40px;left:12px;top:8px} }
