@@ -1,0 +1,275 @@
+/* FONAS – be užtemdymo, kaip buvo */
+body{ background:url("/bg.jpg") center/cover fixed no-repeat; }
+/* išjunk bet kokį ankstesnį overlay */
+body::before{ display:none !important; }
+
+/* Nuimti galimą vandensženklį */
+body::after,[class*="watermark"],[id*="watermark"],.watermark,.bg-watermark{display:none!important}
+
+/* Kortelės/panelės 100% nepermatomos ir ryškios */
+.card,.rounded-2xl,.bg-white,.ring-1{
+  background:#fff !important;
+  mix-blend-mode:normal !important;
+  border:1px solid rgba(15,23,42,.10);
+  box-shadow:0 8px 18px rgba(0,0,0,.08);
+}
+
+/* Lentelių skaitomumas */
+table th{background:#f8fafc !important;color:#0f172a !important;font-weight:600}
+table td{background:#fff !important;color:#0f172a}
+
+/* Įvestys/tekstas */
+input,textarea,select{background:#fff !important;color:#0f172a !important;border-color:rgba(15,23,42,.25)!important}
+h1,h2,h3,label,legend{color:#0f172a !important}
+
+/* Logotipas šiek tiek didesnis */
+img.logo{transform:scale(1.15);transform-origin:left center}
+/* Tik "Prisgrunnlag" ir "Status" (abu turi inline border stilių) */
+section[style*="border: 1px solid #e5e7eb"],
+div[style*="border: 1px solid #e5e7eb"]{
+  background: rgba(0,0,0,.28) !important;        /* lengvas fonas tik šiems blokams */
+  border-color: rgba(255,255,255,.25) !important;
+}
+section[style*="border: 1px solid #e5e7eb"] h3,
+div[style*="border: 1px solid #e5e7eb"] h3{
+  color:#fff !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.7);
+}
+section[style*="border: 1px solid #e5e7eb"] p,
+section[style*="border: 1px solid #e5e7eb"] ul,
+section[style*="border: 1px solid #e5e7eb"] li,
+div[style*="border: 1px solid #e5e7eb"] p,
+div[style*="border: 1px solid #e5e7eb"] ul,
+div[style*="border: 1px solid #e5e7eb"] li{
+  color:#fff !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.6);
+}
+section[style*="border: 1px solid #e5e7eb"] b{ color:#fff !important; }
+div[style*="border: 1px solid #e5e7eb"] button{
+  background:rgba(15,23,42,.85) !important; color:#fff !important;
+  border-color:rgba(255,255,255,.25) !important;
+}
+/* Tik blokai su inline border (#e5e7eb) – Prisgrunnlag ir Status */
+section[style*="border: 1px solid #e5e7eb"],
+div[style*="border: 1px solid #e5e7eb"]{
+  background: rgba(0,0,0,.55) !important;
+  border-color: rgba(255,255,255,.28) !important;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+section[style*="border: 1px solid #e5e7eb"] h3,
+div[style*="border: 1px solid #e5e7eb"] h3{
+  color:#fff !important; text-shadow:0 1px 2px rgba(0,0,0,.8);
+}
+section[style*="border: 1px solid #e5e7eb"] p,
+section[style*="border: 1px solid #e5e7eb"] ul,
+section[style*="border: 1px solid #e5e7eb"] li,
+div[style*="border: 1px solid #e5e7eb"] p,
+div[style*="border: 1px solid #e5e7eb"] ul,
+div[style*="border: 1px solid #e5e7eb"] li{
+  color:#fff !important; text-shadow:0 1px 2px rgba(0,0,0,.7);
+}
+section[style*="border: 1px solid #e5e7eb"] b{ color:#fff !important; }
+section[style*="border: 1px solid #e5e7eb"] p,
+section[style*="border: 1px solid #e5e7eb"] li{
+  color:#fff !important;
+  font-weight:600;
+}
+/* --- readability 1757416960 --- */
+:root { --card-bg: rgba(255,255,255,.92); }
+
+/* Kortelės/turinio blokai – baltesni, su vos vos blur/saturate */
+.card,
+.rounded-2xl.bg-white,
+.shadow-sm.ring-1 { background: var(--card-bg) !important; backdrop-filter: saturate(115%) blur(.5px); }
+
+/* Būtent tie skyriai su border: 1px solid #e5e7eb */
+section[style*="border: 1px solid #e5e7eb"] h3,
+section[style*="border: 1px solid #e5e7eb"] p,
+section[style*="border: 1px solid #e5e7eb"] li,
+section[style*="border: 1px solid #e5e7eb"] b { color:#0f172a !important; text-shadow:none !important; }
+
+/* FONAS – paliekam ryškų, tik atnaujinam versiją */
+body{background-image:url('/assets/bg-custom.png?v:1757416960');background-size:cover;background-position:center;background-attachment:fixed}
+
+/* Lengva šviesi plėvelė virš fono, kad turinys „pakiltų“ */
+.bg-overlay{position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.35))}
+#root{position:relative;z-index:1}
+/* — tik kortelėms su inline border: 1px solid #e5e7eb — */
+section[style*="border: 1px solid #e5e7eb"]{
+  background: rgba(255,255,255,.95) !important;
+  backdrop-filter: saturate(115%) blur(.5px);
+}
+section[style*="border: 1px solid #e5e7eb"] h3{
+  color:#0b1220 !important; font-weight:700 !important; letter-spacing:-.01em;
+}
+section[style*="border: 1px solid #e5e7eb"] p,
+section[style*="border: 1px solid #e5e7eb"] li,
+section[style*="border: 1px solid #e5e7eb"] b{
+  color:#0f172a !important; text-shadow:none !important;
+}
+/* Abi rūšys: ir <section>, ir <div> su inline border */
+section[style*="border: 1px solid #e5e7eb"],
+div[style*="border: 1px solid #e5e7eb"]{
+  background: rgba(255,255,255,.96) !important;
+  backdrop-filter: saturate(115%) blur(.5px);
+}
+section[style*="border: 1px solid #e5e7eb"] h3,
+div[style*="border: 1px solid #e5e7eb"] h3{
+  color:#0b1220!important; font-weight:700!important; letter-spacing:-.01em;
+}
+section[style*="border: 1px solid #e5e7eb"] p,
+section[style*="border: 1px solid #e5e7eb"] li,
+section[style*="border: 1px solid #e5e7eb"] b,
+div[style*="border: 1px solid #e5e7eb"] p,
+div[style*="border: 1px solid #e5e7eb"] li,
+div[style*="border: 1px solid #e5e7eb"] b{
+  color:#0f172a!important; text-shadow:none!important;
+}
+
+/* --- Pakeičiam viršutinį brand tekstą/ikoną į savo logotipą --- */
+header a[href="/"]{
+  display:inline-block !important;
+  width: 200px;            /* prireikus koreguok plotį */
+  height: 48px;            /* prireikus koreguok aukštį */
+  background: url('/assets/logo-custom.png?v=1757418081') no-repeat center / contain;
+  color: transparent !important;
+  text-indent: -9999px; white-space: nowrap; overflow: hidden;
+}
+/* Paslepiam bet kokį viduje esantį IMG/SVG, kad nesidubliuotų */
+header a[href="/"] img,
+header a[href="/"] svg { display:none !important; }
+/* LOGO override – uždengiam „SmartRP“ tekstą logotipu */
+header a[href="/"],
+header nav a[href="/"],
+header .container a:first-child{
+  display:inline-block !important;
+  width:240px; height:60px;
+  background:url('/assets/logo-custom.png') no-repeat center / contain !important;
+  color:transparent !important; font-size:0 !important;
+  text-indent:-9999px; white-space:nowrap; overflow:hidden;
+}
+/* paslepiam IMG/SVG, jei yra */
+header a[href="/"] img,
+header a[href="/"] svg { display:none !important; }
+/* Pakeisti „brand“ nuorodą antraštėje į paveikslėlį (veiks ir su /, /#, #) */
+header .container a[href]:first-of-type{
+  display:inline-block !important;
+  width:220px; height:52px;
+  background:url('/assets/logo-custom.png') no-repeat left center / contain !important;
+  text-indent:-9999px; white-space:nowrap; overflow:hidden;
+  color:transparent !important; font-size:0 !important;
+}
+/* Paslėpti esamą ikoną/tekstą nuorodos viduje */
+header .container a[href]:first-of-type > svg,
+header .container a[href]:first-of-type > img,
+header .container a[href]:first-of-type > span{ display:none !important; }
+@media (max-width: 640px){
+  header .container a[href]:first-of-type{ width:180px; height:44px; }
+}
+/* Tvirtesnis taikymas į brand nuorodą */
+header a[href="/"],
+header a[href="/#"],
+header .container a[href^="/"]:first-child {
+  display:inline-block !important;
+  width:220px; height:52px;
+  background:url('/assets/logo-custom.png') no-repeat left center / contain !important;
+  text-indent:-9999px; white-space:nowrap; overflow:hidden;
+  color:transparent !important; font-size:0 !important;
+}
+/* Paslėpti esamą ikoną/tekstą nuorodos viduje */
+header a[href="/"] > svg, header a[href="/#"] > svg,
+header a[href="/"] > img, header a[href="/#"] > img,
+header a[href="/"] > span, header a[href="/#"] > span { display:none !important; }
+
+/* Mažesniuose ekranuose */
+@media (max-width: 640px){
+  header a[href="/"], header a[href="/#"],
+  header .container a[href^="/"]:first-child { width:180px; height:44px; }
+}
+/* Header: logo + tekstas greta */
+header .container a[href]:first-of-type{
+  display:inline-flex !important; align-items:center; gap:12px;
+  font-size:20px !important; font-weight:600; color:#0f172a !important;
+  text-indent:0 !important; white-space:nowrap !important; overflow:visible !important;
+}
+header .container a[href]:first-of-type > span{ display:inline !important; }
+header .container a[href]:first-of-type > img,
+header .container a[href]:first-of-type > svg{ display:none !important; }
+header .container a[href]:first-of-type::before{
+  content:""; display:inline-block; width:32px; height:32px;
+  background:url('/assets/logo-custom.png?v=1757428971') center/contain no-repeat;
+}
+/* Header: logo + "SmartRP" greta, atšaukiam ankstesnį slėpimą */
+header a[href="/"]{
+  display:inline-flex !important; align-items:center; gap:12px;
+  font-size:20px !important; font-weight:600; color:#0f172a !important;
+  text-indent:0 !important; white-space:nowrap !important; overflow:visible !important;
+}
+/* paslepiam seną ikoną */
+header a[href="/"] > svg, header a[href="/"] > img{ display:none !important; }
+/* mūsų logotipas */
+header a[href="/"]::before{
+  content:""; display:inline-block; width:36px; height:36px;
+  background:url('/assets/logo-clean-full.png?v=1757429159') center/contain no-repeat;
+}
+@media (max-width:640px){
+  header a[href="/"]{ font-size:18px !important; }
+  header a[href="/"]::before{ width:28px; height:28px; }
+}
+/* Suartinti logotipą ir „SmartRP“ tekstą */
+header a[href="/"]{
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:6px !important;           /* buvo 12px – dar mažiau, jei reikia: 4px */
+  padding-left:0 !important;
+}
+header a[href="/"]::before{
+  margin:0 !important;          /* kad nebūtų papildomo tarpo */
+  transform:translateY(1px);    /* švelnesnis vertikalus suvedimas */
+}
+@media (max-width:640px){
+  header a[href="/"]{ gap:4px !important; }
+}
+/* Tighter brand: logo + text */
+header a[href="/"]{
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:0 !important;                 /* joks tarpas */
+  padding:0 !important;
+}
+header a[href="/"]::before{
+  margin:0 4px 0 0 !important;      /* labai mažas tarpelis (4px). Jei reikia dar arčiau – dėk 2px ar 0 */
+  transform:none !important;
+}
+header .container a[href]:first-of-type > span{
+  display:inline !important;        /* atšaukiam galimą "display:none" */
+  margin:0 !important;
+  line-height:1 !important;
+}
+/* BRAND-HACK v2: logo + tekstas arti */
+header .container a[href="/"]{
+  display:flex !important;
+  align-items:center !important;
+  gap:4px !important;                 /* tarpelis tarp logo ir teksto */
+}
+/* Uždusinam Tailwind space-x-* marginus tik šioje nuorodoje */
+header .container a[href="/"] > :not([hidden]) ~ :not([hidden]){
+  margin-left:4px !important;
+  margin-right:0 !important;
+}
+/* Saugai: neleisk, kad kiti gap’ai nugali šito linko */
+header .container a[href="/"] *{
+  gap:0 !important;
+}
+/* BRAND-HACK v3: bet kuris pirmas header’io linkas viršuje */
+header a[href^="/"]{
+  display:flex !important;
+  align-items:center !important;
+  gap:4px !important;
+}
+header a[href^="/"] > :not([hidden]) ~ :not([hidden]){
+  margin-left:4px !important;
+  margin-right:0 !important;
+}

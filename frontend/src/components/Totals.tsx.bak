@@ -1,0 +1,34 @@
+import type { Totals as TotalsType } from "../types";
+
+export default function Totals({ totals }: { totals?: TotalsType }) {
+  if (!totals) return <p style={{color:"#6b7280"}}>Ingen beregning ennå.</p>;
+
+  const row = (label: string, val: number) => (
+    <tr>
+      <td>{label}</td>
+      <td style={{ textAlign: "right" }}>
+        {totals.currency} {val.toFixed(2)}
+      </td>
+    </tr>
+  );
+
+  return (
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+      <table width="100%" cellPadding={6}>
+        <tbody>
+          {row("Materialer", totals.materials)}
+          {row("Arbeid", totals.labor)}
+          {row("Verktøy", totals.tools)}
+          {row("Overhead", totals.overhead)}
+          {row("Fortjeneste", totals.profit)}
+          <tr>
+            <td><b>Totalt</b></td>
+            <td style={{ textAlign: "right" }}>
+              <b>{totals.currency} {totals.total.toFixed(2)}</b>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}

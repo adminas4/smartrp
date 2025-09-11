@@ -1,0 +1,57 @@
+import type { AnalyserResponse, Totals } from "../types";
+
+export function exportPdf(desc: string, data: AnalyserResponse, totals?: Totals) {
+  const lines: string[] = [];
+  lines.push("# SmartRP sąmata (demo eksportas)");
+  lines.push("");
+  lines.push("Aprašymas:");
+  lines.push(desc || "(nenurodytas)");
+  lines.push("");
+
+  lines.push("== Medžiagos ==");
+  data.materials.forEach((m, i) =>
+    lines.push(`${i + 1}. ${m.name ?? "?"} — ${m.qty ?? 0} ${m.unit ?? ""}`.trim())
+  );
+  if (!data.materials.length) lines.push("(nėra)");
+
+  lines.push("");
+  lines.push("== Darbai ==");
+  data.workflow.forEach((w, i) =>
+    lines.push(`${i + 1}. ${w.task ?? "?"} — ${w.hours ?? 0} h`)
+  );
+  if (!data.workflow.length) lines.push("(nėra)");
+
+  lines.push("");
+  lines.push("== Brigada ==");
+  data.crew.forEach((c, i) =>
+    lines.push(`${i + 1}. ${c.role ?? "?"} — ${c.count ?? 0} vnt.`)
+  );
+  if (!data.crew.length) lines.push("(nėra)");
+
+  lines.push("");
+  lines.push("== Įrankiai ==");
+  data.tools.forEach((t, i) =>
+    lines.push(`${i + 1}. ${t.name ?? "?"} — ${t.days ?? 0} d.`)
+  );
+  if (!data.tools.length) lines.push("(nėra)");
+
+  if (totals) {
+    lines.push("");
+    lines.push("== Santrauka ==");
+    lines.push(`Medžiagos: ${totals.materials.toFixed(2)} ${totals.currency}`);
+    lines.push(`Darbas:    ${totals.labor.toFixed(2)} ${totals.currency}`);
+    lines.push(`Įrankiai:  ${totals.tools.toFixed(2)} ${totals.currency}`);
+    lines.push(`OH:        ${totals.overhead.toFixed(2)} ${totals.currency}`);
+    lines.push(`Pelnas:    ${totals.profit.toFixed(2)} ${totals.currency}`);
+    lines.push(`VISO:      ${totals.total.toFixed(2)} ${totals.currency}`);
+  }
+
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "smartrp-estimate.txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}

@@ -1,0 +1,28 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+/* Base */
+@layer base {
+  table { @apply w-full; }
+  th,td { @apply border border-slate-200 p-2; }
+  h3 { @apply font-semibold text-slate-900; }
+}
+
+/* Components */
+@layer components {
+  .container { @apply mx-auto max-w-5xl p-6; }
+  .card { @apply rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4 transition-shadow hover:shadow-md; }
+
+  /* Bendras mygtukas */
+  .btn { @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed; }
+
+  /* Pirminis mygtukas – nekartok `@apply btn`, dėk utilitus tiesiai */
+  .btn-primary { @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium bg-sky-600 text-white ring-0 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed; }
+
+  .btn-ghost { @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed; }
+}
+
+/* Utilities */
+@layer utilities {
+  .grid-cards { @apply grid gap-4; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+}

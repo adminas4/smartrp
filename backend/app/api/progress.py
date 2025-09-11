@@ -1,14 +1,12 @@
-from __future__ import annotations
+from fastapi import APIRouter, Response
+from app.flags import get_mode
 
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, status
+router = APIRouter(prefix="/progress", tags=["progress"])
 
-router = APIRouter()
+@router.get("/health", status_code=204)
+def health():
+    return Response(status_code=204)
 
-@router.get("/api/progress/list")
-def progress_list(project_id: Optional[str] = None) -> Dict[str, Any]:
-    return {"items": []}
-
-@router.post("/api/progress/create", status_code=status.HTTP_201_CREATED)
-def progress_create(payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return {"ok": True, "id": "stub"}
+@router.get("/healthz")
+def healthz():
+    return {"status": "ok", "mode": get_mode(), "model": "gpt-4o"}

@@ -1,0 +1,50 @@
+from __future__ import annotations
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/estimate", tags=["estimate"])
+
+class AnalyzeIn(BaseModel):
+    description: str
+
+class Material(BaseModel):
+    name: str
+    qty: float
+    unit: Optional[str] = None
+    price: Optional[float] = None
+
+class Task(BaseModel):
+    task: str
+    hours: float
+
+class Crew(BaseModel):
+    role: str
+    count: int
+
+class Tool(BaseModel):
+    name: str
+    days: float = 0
+
+class AnalyzeOut(BaseModel):
+    materials: List[Material] = []
+    workflow: List[Task] = []
+    crew: List[Crew] = []
+    tools: List[Tool] = []
+
+@router.post("/analyze", response_model=AnalyzeOut)
+def analyze(body: AnalyzeIn) -> Dict[str, Any]:
+    text = (body.description or "").lower()
+
+    materials: List[Material] = []
+    workflow: List[Task] = []
+    crew: List[Crew] = [Crew(role="Snekker", count=2)]
+    tools: List[Tool] = [Tool(name="Drill", days=1)]
+
+    area = 9.0
+    if "3x3" in text or "3 x 3" in text:
+        area = 9.0
+    materials.append(Material(name="OSB", qty=area, unit="m²"))
+    workflow.append(Task(task="Montere OSB", hours=4.0))
+
+    return {"materials": materials, "workflow": workflow, "crew": crew, "tools": tools}

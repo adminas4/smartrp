@@ -1,21 +1,19 @@
-from __future__ import annotations
-from backend.app.api import agent as agent_router
-
 from fastapi import FastAPI
-from backend.app.api import health as health_router
-from backend.app.api import progress as progress_router
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="SmartRP API")
-app.include_router(agent_router.router)
 
-# Health routes
-app.include_router(health_router.router)
-app.include_router(progress_router.router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+)
 
-# Pricing router (optional – API kyla ir be jo)
-try:
-    from backend.pricing.router import router as pricing_router
-    app.include_router(pricing_router)
-except Exception as e:
-    import logging
-    logging.getLogger("uvicorn.error").warning(f"Pricing router not loaded: {e}")
+from app.api import agent, estimate, pricing, progress, admin  # noqa
+
+for r in (agent.router, estimate.router, pricing.router, progress.router, admin.router):
+    app.include_router(r, prefix="/api")
+from app.api.pricing import router as pricing_router
+app.include_router(pricing_router)
+
+from app.api.estimate import router as estimate_router
+app.include_router(estimate_router)

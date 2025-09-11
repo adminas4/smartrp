@@ -1,0 +1,32 @@
+[0;1;34m# /etc/systemd/system/smartrp-api.service[0m
+[Unit]
+Description=SmartRP API (uvicorn)
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/smartrp.env
+User=smartrp
+WorkingDirectory=/srv/smartrp
+EnvironmentFile=-/etc/smartrp.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/srv/smartrp/.venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --workers 2 --log-level info
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+
+[0;1;34m# /etc/systemd/system/smartrp-api.service.d/10-env.conf[0m
+[Service]
+EnvironmentFile=/etc/smartrp.env
+
+[0;1;34m# /etc/systemd/system/smartrp-api.service.d/override.conf[0m
+[Service]
+WorkingDirectory=/srv/smartrp/backend
+Environment=PYTHONPATH=/srv/smartrp/backend
+# paliekam jūsų esamas ENV
+Environment=OPENAI_MODE=demo
+Environment=ADMIN_TOKEN=change-me-very-secret
+# perrašom ExecStart, kad keltų app.main:app iš venv
+ExecStart=
+ExecStart=/srv/smartrp/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2

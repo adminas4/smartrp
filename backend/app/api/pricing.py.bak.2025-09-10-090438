@@ -1,0 +1,75 @@
+from __future__ import annotations
+from typing import List, Optional
+from fastapi import APIRouter
+from pydantic import BaseModel, Field
+
+router = APIRouter(prefix="/pricing", tags=["pricing"])
+
+class Material(BaseModel):
+    name: str
+    qty: float
+    unit: Optional[str] = None
+    price: Optional[float] = None
+
+class Task(BaseModel):
+    task: str
+    hours: float
+
+class Crew(BaseModel):
+    role: str
+    count: int
+
+class Tool(BaseModel):
+    name: str
+    days: float = 0
+
+class Params(BaseModel):
+    labor_rate: float
+    material_markup: float = 0.0
+    overhead_pct: float = 0.0
+    profit_pct: float = 0.0
+    currency: str = "NOK"
+
+class SuggestIn(BaseModel):
+    materials: List[Material] = Field(default_factory=list)
+    workflow: List[Task]     = Field(default_factory=list)
+    crew: List[Crew]         = Field(default_factory=list)
+    tools: List[Tool]        = Field(default_factory=list)
+    params: Params
+
+@router.post("/suggest")
+def suggest(body: SuggestIn):
+    hours = sum((t.hours or 0) for t in body.workflow)
+    crew_count = sum((c.count or 0) for c in body.crew) or 1
+    labor_cost = hours * max(crew_count, 1) * (body.params.labor_rate or 0)
+
+    materials_cost = sum(((m.price or 0) * (m.qty or 0)) for m in body.materials)
+    materials_cost *= (1 + (body.params.material_markup or 0))
+
+    tools_cost = 0.0  # demo: neįkainojam
+
+    subtotal = labor_cost + materials_cost + tools_cost
+    overhead = subtotal * (body.params.overhead_pct or 0)
+    profit   = subtotal * (body.params.profit_pct or 0)
+    total    = subtotal + overhead + profit
+
+    return {
+        "currency": body.params.currency,
+        "total": round(total, 2),
+        # nauja – „breakdown“
+        "breakdown": {
+            "materials": round(materials_cost, 2),
+            "labor":     round(labor_cost, 2),
+            "tools":     round(tools_cost, 2),
+            "overhead":  round(overhead, 2),
+            "profit":    round(profit, 2),
+            "subtotal":  round(subtotal, 2),
+        },
+        # suderinamumas su esamu frontu
+        "materials_total": round(materials_cost, 2),
+        "labor_total":     round(labor_cost, 2),
+        "tools_total":     round(tools_cost, 2),
+        "overhead_total":  round(overhead, 2),
+        "profit_total":    round(profit, 2),
+        "subtotal":        round(subtotal, 2),
+    }

@@ -1,0 +1,13 @@
+/* Logotipo pakeitimas: uždengiam pirmą „brand“ nuorodą header’yje */
+header a[href="/"],
+header nav a[href="/"],
+header .container a:first-child{
+  display:inline-block !important;
+  width:220px; height:56px;
+  background:url('/assets/logo-custom.png?v=1757418305') no-repeat center / contain !important;
+  color:transparent !important; font-size:0 !important;
+  text-indent:-9999px; white-space:nowrap; overflow:hidden;
+}
+/* Nesidubliuotų senas IMG/SVG */
+header a[href="/"] img,
+header a[href="/"] svg { display:none !important; }

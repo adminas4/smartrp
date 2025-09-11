@@ -1,0 +1,19 @@
+/* Vienas, švarus logotipas greta teksto */
+header .container a[href="/"]{
+  display:inline-flex !important; align-items:center !important; gap:8px !important;
+  background:url('/assets/logo-clean-full.png') no-repeat left center / 28px auto !important;
+  padding-left:36px !important;
+}
+/* Paslepiam bundle įterptą SVG/IMG, kad nebūtų dublio */
+header .container a[href="/"] > svg,
+header .container a[href="/"] > img { display:none !important; }
+
+@media (max-width:640px){
+  header .container a[href="/"]{ background-size:24px auto; padding-left:32px; }
+}
+/* mažesnis tarpas tarp logo ir teksto */
+header .mx-auto.max-w-5xl.px-4.py-3.flex.items-center.gap-3{ gap:8px !important; }
+/* logo aukštis */
+header img[src="/logo.png"]{ height:32px !important; width:auto !important; }
+/* užrašas šalia – tamsesnis, be šešėlio */
+header .font-semibold.text-slate-900{ color:#0b1220 !important; text-shadow:none !important; }

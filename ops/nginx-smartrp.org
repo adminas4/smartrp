@@ -1,0 +1,44 @@
+server {
+    listen 80;
+    server_name smartrp.org;
+    return 301 https://smartrp.org$request_uri;
+}
+server {
+    listen 443 ssl http2;
+    server_name smartrp.org;
+
+    ssl_certificate     /etc/letsencrypt/live/smartrp.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/smartrp.org/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+
+    root /srv/smartrp/frontend/dist;
+    index index.html;
+
+    # Health (exact)
+    location = /api/progress/health  { return 204; }
+    location = /api/progress/healthz { alias /srv/smartrp/frontend/dist/healthz.json; default_type application/json; add_header Cache-Control "no-store" always; }
+
+    # API proxy
+    location /api/ { include snippets/smartrp_api_proxy.conf; }
+    location ~ /(\.|\..*) { deny all; }
+
+    # SPA + kalbos slapukas
+    location / {
+        add_header Set-Cookie "i18next=nb; Path=/; Max-Age=31536000" always;
+        try_files $uri /index.html;
+    }
+
+    # JS – viena Cache-Control, be Expires
+    location ~* \.js$ {
+        try_files $uri =404;
+        expires off;
+        add_header Cache-Control "no-cache, max-age=60" always;
+    }
+
+    # Kiti statiniai
+    location ~* \.(css|png|jpe?g|svg|ico|woff2?|ttf|map)$ {
+        try_files $uri =404;
+        access_log off;
+        expires 7d;
+    }
+}

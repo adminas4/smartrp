@@ -1,0 +1,82 @@
+from __future__ import annotations
+from typing import Optional, Dict, Any
+from fastapi import APIRouter
+from pydantic import BaseModel
+import os
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
+
+router = APIRouter()
+
+class AskIn(BaseModel):
+    question: str
+    project_id: Optional[str] = None
+
+@router.post("/api/agent/ask")
+def agent_ask(body: AskIn) -> Dict[str, Any]:
+    mode = os.environ.get("AGENT_MODE", "demo").lower()
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    q = (body.question or "").strip()
+    q_lc = q.lower()
+
+    # Modelio paklausimas → grąžink env modelį be LLM
+    if "model" in q_lc or "modelis" in q_lc:
+        return {"answer": model}
+
+    # Demo/fallback režimas be LLM
+    if mode == "demo" or not os.environ.get("OPENAI_API_KEY") or OpenAI is None:
+        return {"answer": "Klausimą gavau. Kainoms naudok kainų paiešką."}
+
+    try:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY]()_
+sudo tee /srv/smartrp/backend/app/api/agent.py >/dev/null <<'PY'
+from __future__ import annotations
+from typing import Optional, Dict, Any
+from fastapi import APIRouter
+from pydantic import BaseModel
+import os
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
+
+router = APIRouter()
+
+class AskIn(BaseModel):
+    question: str
+    project_id: Optional[str] = None
+
+@router.post("/api/agent/ask")
+def agent_ask(body: AskIn) -> Dict[str, Any]:
+    mode = os.environ.get("AGENT_MODE", "demo").lower()
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    q = (body.question or "").strip()
+    q_lc = q.lower()
+
+    # Modelio paklausimas → grąžink env modelį be LLM
+    if "model" in q_lc or "modelis" in q_lc:
+        return {"answer": model}
+
+    # Demo/fallback režimas be LLM
+    if mode == "demo" or not os.environ.get("OPENAI_API_KEY") or OpenAI is None:
+        return {"answer": "Klausimą gavau. Kainoms naudok kainų paiešką."}
+
+    try:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        sys = (
+            "Tu esi SmartRP asistentas. Atsakinėk trumpai. "
+            "Neskelbk modelio ar API detalių. Jei klausia apie kainas, primink skiltį 'Kainų paieška'."
+        )
+        resp = client.responses.create(
+            model=model,
+            temperature=float(os.environ.get("OPENAI_TEMPERATURE", "0.2")),
+            input=[
+                {"role": "system", "content": [{"type": "input_text", "text": sys}]},
+                {"role": "user", "content": [{"type": "input_text", "text": q}]},
+            ],
+        )
+        return {"answer": resp.output_text}
+    except Exception:
+        return {"answer": "Klausimą gavau. Bandyk dar kartą."}

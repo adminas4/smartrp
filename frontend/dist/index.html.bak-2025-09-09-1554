@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartRP</title>
+    <script>window.runBOMAll=window.runBOMAll||function(){};</script>
+  <script>window.runBOMAll=window.runBOMAll||function(){};</script>
+  <script>window.runDemoAll=window.runDemoAll||function(){};</script>
+  <script type="module" crossorigin src="/assets/index-DxOKILTD.js?v=1757407371"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-C8zTvy_P.css">
+<script>try{localStorage.setItem("i18nextLng","nb");document.cookie="i18next=nb; Path=/; Max-Age=31536000"}catch(e){}</script><link rel="stylesheet" href="/_custom.css?v=1757430754">
+<link rel="stylesheet" href="/_custom.css?v=1757430754"><link rel="stylesheet" href="/assets/logo-override.css?v=1757418313">
+<style id="logo-inline-override">
+header a{background:url("/assets/logo-custom.png") no-repeat left center/contain !important;
+display:inline-block !important;width:220px !important;height:52px !important;
+color:transparent !important;font-size:0 !important;text-indent:-9999px !important;overflow:hidden !important}
+header a img,header a svg,header a span{display:none !important}
+(max-width:640px){header a{width:180px !important;height:44px !important}}
+</style>
+<link rel="stylesheet" href="/assets/logo-inject.css?v=1757423552">
+<link rel="stylesheet" href="/assets/logo-inject.css?v=1757428362">
+<link rel="stylesheet" href="/_custom.v2.css?v=1757431893">
+</head>
+  <body class="bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 font-sans">
+  <div class="bg-overlay"></div>
+    <div id="root"></div>
+  <script src="/assets/logo-override.js?v=1757422678"></script>
+<script src="/assets/logo-override.js?v=1757423004" defer></script>
+<script src="/assets/logo-inject.js?v=1757423552" defer></script>
+<script src="/assets/logo-inject.js?v=1757428362" defer></script>
+</body>
+</html>

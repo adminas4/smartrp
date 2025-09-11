@@ -1,34 +1,6 @@
-# Python
+logs/
+logs/**/*
+*.pid
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.venv/
-.env
-.env.*
-.instance/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Node / Frontend
-node_modules/
-dist/
-.vite/
-*.log
-
-# Editors / OS
-.vscode/
-.idea/
+*.pyc
 .DS_Store
-*.swp
-
-# Build artefacts
-build/
-
-# Caches
-.cache/
-.ssh/
-.gitconfig

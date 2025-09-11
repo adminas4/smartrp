@@ -1,0 +1,458 @@
+// frontend/src/App.tsx
+import Nav from "./components/Nav";
+import Hero from "./components/Hero";
+import { useState } from "react";
+import { api } from "./lib/api";
+import Totals from "./components/Totals";
+import Pricing from "./components/Pricing";
+import About from "./components/About";
+import StatusBar from "./components/Status";
+import Progress from "./components/Progress";
+import { exportPdf } from "./lib/pdf";
+import type {
+  AnalyserResponse,
+  RecalcResponse,
+  Material,
+  WorkflowItem,
+  CrewMember,
+  Tool,
+} from "./types";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+
+const SAMPLES = [
+  "garasje 50 m² med plate på mark",
+  "lite tre-ramme 3x3 m med OSB-kledning",
+  "rehab av bad 6 m², flis + membran",
+  "innvendig isolering 100 mm, 40 m² vegg",
+  "taktekking 120 m², papp",
+];
+
+const empty: AnalyserResponse = { materials: [], workflow: [], crew: [], tools: [] };
+
+type PricingParams = {
+  labor_rate: number;       // NOK/h
+  material_markup: number;  // 0.15 = +15%
+  overhead_pct: number;     // 0.10 = +10%
+  profit_pct: number;       // 0.10 = +10%
+  currency: string;
+};
+
+const DEFAULT_PARAMS: PricingParams = {
+  labor_rate: 750,
+  material_markup: 0.15,
+  overhead_pct: 0.10,
+  profit_pct: 0.10,
+  currency: "NOK",
+};
+
+export default function App() {
+  const [desc, setDesc] = useState("");
+  const [sample, setSample] = useState<string>("");
+  const [data, setData] = useState<AnalyserResponse>(empty);
+  const [totals, setTotals] = useState<RecalcResponse["totals"]>();
+  const [loading, setLoading] = useState<"idle" | "analyze" | "recalc" | "export">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  // Tarifų būsena
+  const [params, setParams] = useState<PricingParams>(DEFAULT_PARAMS);
+  function setParam<K extends keyof PricingParams>(key: K, val: PricingParams[K]) {
+    setParams((p) => ({ ...p, [key]: val }));
+  }
+
+  async function doAnalyser() {
+    try {
+      setError(null);
+      setLoading("analyze");
+      const r = await api.post<AnalyserResponse>("/estimate/analyze", { description: desc });
+      setData(r.data);
+      setTotals(undefined);
+    } catch {
+      setError("Noe gikk galt under analyse.");
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  // Perskaičiavimas per /api/pricing/suggest
+  async function doRecalc() {
+    try {
+      setError(null);
+      setLoading("recalc");
+      const r = await api.post("/pricing/suggest", { ...data, params });
+      const lines = r.data?.lines || {};
+      const total = r.data?.total ?? 0;
+      setTotals({
+        materials: Number(lines.materials || 0),
+        labor: Number(lines.labor || 0),
+        tools: Number(lines.tools || 0),
+        overhead: Number(lines.overhead || 0),
+        profit: Number(lines.profit || 0),
+        total: Number(total || 0),
+        currency: r.data?.currency || "NOK",
+      } as any);
+    } catch {
+      setError("Noe gikk galt under prisberegning.");
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  function updateMat(i: number, patch: Partial<Material>) {
+    const next = structuredClone(data);
+    Object.assign(next.materials[i], patch);
+    setData(next);
+  }
+  function updateWf(i: number, patch: Partial<WorkflowItem>) {
+    const next = structuredClone(data);
+    Object.assign(next.workflow[i], patch);
+    setData(next);
+  }
+  function updateCrew(i: number, patch: Partial<CrewMember>) {
+    const next = structuredClone(data);
+    Object.assign(next.crew[i], patch);
+    setData(next);
+  }
+  function updateTool(i: number, patch: Partial<Tool>) {
+    const next = structuredClone(data);
+    Object.assign(next.tools[i], patch);
+    setData(next);
+  }
+
+  const co2Data = data.materials.map((m) => ({
+    name: m.name || "?",
+    kg: Number(m.qty ?? 0) * 1.5,
+  }));
+  const co2Total = co2Data.reduce((s, x) => s + x.kg, 0);
+
+  async function runAnalyserWithDesc(d: string) {
+    try {
+      setError(null);
+      setLoading("analyze");
+      const r = await api.post<AnalyserResponse>("/estimate/analyze", { description: d });
+      setData(r.data);
+      setTotals(undefined);
+      return r.data;
+    } catch {
+      setError("Noe gikk galt under analyse.");
+      return empty;
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  async function useSample() {
+    if (!sample) return;
+    setDesc(sample);
+    await runAnalyserWithDesc(sample);
+    await doRecalc();
+  }
+
+  async function onExportPdf() {
+    try {
+      setLoading("export");
+      exportPdf(desc, data, totals);
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  return (
+    <div className="container space-y-4">
+      <Nav />
+      <StatusBar />
+      <Hero />
+
+      {/* Priser / påslag */}
+      <section className="card">
+        <h3 style={{ marginTop: 0 }}>Priser / påslag</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px,1fr))", gap: 8 }}>
+          <label>
+            <div>Timepris (NOK/h)</div>
+            <input
+              type="number"
+              value={params.labor_rate}
+              onChange={(e) => setParam("labor_rate", Number(e.target.value || 0))}
+              min={0}
+              step={50}
+              style={{ width: "100%" }}
+            />
+          </label>
+          <label>
+            <div>Material-påslag (%)</div>
+            <input
+              type="number"
+              value={Math.round(params.material_markup * 100)}
+              onChange={(e) => setParam("material_markup", Math.max(0, Number(e.target.value || 0)) / 100)}
+              min={0}
+              step={1}
+              style={{ width: "100%" }}
+            />
+          </label>
+          <label>
+            <div>Overhead (%)</div>
+            <input
+              type="number"
+              value={Math.round(params.overhead_pct * 100)}
+              onChange={(e) => setParam("overhead_pct", Math.max(0, Number(e.target.value || 0)) / 100)}
+              min={0}
+              step={1}
+              style={{ width: "100%" }}
+            />
+          </label>
+          <label>
+            <div>Fortjeneste (%)</div>
+            <input
+              type="number"
+              value={Math.round(params.profit_pct * 100)}
+              onChange={(e) => setParam("profit_pct", Math.max(0, Number(e.target.value || 0)) / 100)}
+              min={0}
+              step={1}
+              style={{ width: "100%" }}
+            />
+          </label>
+          <label>
+            <div>Valuta</div>
+            <input
+              value={params.currency}
+              onChange={(e) => setParam("currency", e.target.value || "NOK")}
+              style={{ width: "100%" }}
+            />
+          </label>
+        </div>
+      </section>
+
+      {/* Aprašymas + veiksmai */}
+      <section style={{ marginBottom: 16 }}>
+        <textarea
+          placeholder="Lim inn prosjektbeskrivelse her"
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          rows={5}
+          style={{ width: "100%" }}
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            value={sample}
+            onChange={(e) => setSample(e.target.value)}
+            style={{ padding: 6, minWidth: 260 }}
+            disabled={loading !== "idle"}
+          >
+            <option value="">Eksempel…</option>
+            {SAMPLES.map((s, i) => (
+              <option key={i} value={s}>{s}</option>
+            ))}
+          </select>
+
+          <button
+            className="btn btn-ghost"
+            onClick={useSample}
+            disabled={loading !== "idle" || !sample}
+          >
+            {loading !== "idle" ? "Laster…" : "Bruk eksempel"}
+          </button>
+
+          <button
+            className="btn btn-ghost"
+            onClick={doAnalyser}
+            disabled={loading !== "idle" || !desc.trim()}
+          >
+            {loading === "analyze" ? "Laster…" : "Analyser"}
+          </button>
+
+          <button
+            className="btn btn-primary"
+            onClick={doRecalc}
+            disabled={loading !== "idle" || (!data.materials.length && !data.workflow.length)}
+          >
+            {loading === "recalc" ? "Laster…" : "Beregn pris"}
+          </button>
+
+          <button
+            className="btn btn-primary"
+            disabled={loading !== "idle" || (!data.materials.length && !data.workflow.length)}
+            onClick={onExportPdf}
+          >
+            {loading === "export" ? "Laster…" : "Eksporter PDF"}
+          </button>
+
+          {error ? <span style={{ color: "#b00020", marginLeft: 8 }}>{error}</span> : null}
+        </div>
+      </section>
+
+      {/* Lentelės */}
+      <section className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        <div>
+          <h3>Materialer</h3>
+          <table width="100%" border={1} cellPadding={6}>
+            <thead>
+              <tr>
+                <th>Navn</th>
+                <th>Mengde</th>
+                <th>Enhet</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.materials.map((m, i) => (
+                <tr key={i}>
+                  <td>
+                    <input
+                      value={m.name ?? ""}
+                      onChange={(e) => updateMat(i, { name: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={m.qty ?? 0}
+                      onChange={(e) => updateMat(i, { qty: Number(e.target.value) })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      value={m.unit ?? ""}
+                      onChange={(e) => updateMat(i, { unit: e.target.value })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3>Arbeidsflyt</h3>
+          <table width="100%" border={1} cellPadding={6}>
+            <thead>
+              <tr>
+                <th>Oppgave</th>
+                <th>Timer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.workflow.map((w, i) => (
+                <tr key={i}>
+                  <td>
+                    <input
+                      value={w.task ?? ""}
+                      onChange={(e) => updateWf(i, { task: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={w.hours ?? 0}
+                      onChange={(e) => updateWf(i, { hours: Number(e.target.value) })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3>Mannskap</h3>
+          <table width="100%" border={1} cellPadding={6}>
+            <thead>
+              <tr>
+                <th>Rolle</th>
+                <th>Antall</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.crew.map((c, i) => (
+                <tr key={i}>
+                  <td>
+                    <input
+                      value={c.role ?? ""}
+                      onChange={(e) => updateCrew(i, { role: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={c.count ?? 0}
+                      onChange={(e) => updateCrew(i, { count: Number(e.target.value) })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3>Verktøy</h3>
+          <table width="100%" border={1} cellPadding={6}>
+            <thead>
+              <tr>
+                <th>Navn</th>
+                <th>Dager</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.tools.map((t, i) => (
+                <tr key={i}>
+                  <td>
+                    <input
+                      value={t.name ?? ""}
+                      onChange={(e) => updateTool(i, { name: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={t.days ?? 0}
+                      onChange={(e) => updateTool(i, { days: Number(e.target.value) })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Totals */}
+      <section className="card mt-4">
+        <h3>Kostnadsoversikt</h3>
+        <Totals totals={totals} />
+      </section>
+
+      {/* ESG grafikas */}
+      <section className="card mt-6">
+        <h3>ESG / CO₂</h3>
+        {co2Data.length ? (
+          <>
+            <p>Totalt: {co2Total.toFixed(1)} kg CO₂ (demo)</p>
+            <div style={{ width: "100%", height: 240 }}>
+              <ResponsiveContainer>
+                <BarChart data={co2Data}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" hide={co2Data.length > 6} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="kg" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        ) : (
+          <p>Ingen data.</p>
+        )}
+      </section>
+
+      <Pricing data={data} onTotals={setTotals} />
+      <Progress />
+      <About />
+    </div>
+  );
+}
