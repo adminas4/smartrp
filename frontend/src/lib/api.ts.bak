@@ -1,0 +1,61 @@
+export type Material = { name:string; qty:number; unit?:string };
+export type Task = { task:string; hours:number };
+
+async function postJSON(path: string, body: any) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+const toNum = (v:any) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export async function analyze(description: string, locale="nb"):
+  Promise<{materials:Material[]; workflow:Task[]}> {
+  const res = await postJSON("/api/estimate/analyze", { description, locale });
+  const arr = (v:any)=> Array.isArray(v)? v : [];
+  return {
+    materials: arr(res.materials).map((m:any)=>({
+      name: String(m?.name ?? ""), qty: toNum(m?.qty), unit: String(m?.unit ?? "")
+    })),
+    workflow: arr(res.workflow).map((t:any)=>({
+      task: String(t?.task ?? ""), hours: toNum(t?.hours)
+    })),
+  };
+}
+
+export async function suggest(payload: {
+  materials: Material[]; workflow: Task[];
+  params: { currency:string; labor_rate:number; material_markup:number; overhead_pct:number; profit_pct:number };
+}) {
+  const sanitize = (p:any)=>({
+    materials: (p?.materials||[]).map((m:any)=>({ name:String(m?.name??""), unit:String(m?.unit??""), qty: toNum(m?.qty) })),
+    workflow:  (p?.workflow ||[]).map((t:any)=>({ task:String(t?.task??""), hours: toNum(t?.hours) })),
+    params: {
+      currency: String(p?.params?.currency ?? "NOK"),
+      labor_rate: toNum(p?.params?.labor_rate),
+      material_markup: toNum(p?.params?.material_markup),
+      overhead_pct: toNum(p?.params?.overhead_pct),
+      profit_pct: toNum(p?.params?.profit_pct),
+    }
+  });
+  const r = await postJSON("/api/pricing/suggest", sanitize(payload));
+  return {
+    ...r,
+    materials_total: toNum(r?.materials_total ?? r?.materials),
+    labor_total: toNum(r?.labor_total ?? r?.labor),
+    tools_total: toNum(r?.tools_total ?? r?.tools),
+    overhead_total: toNum(r?.overhead_total ?? r?.overhead),
+    profit_total: toNum(r?.profit_total ?? r?.profit),
+    subtotal: toNum(r?.subtotal),
+    total: toNum(r?.total),
+  };
+}
+
+export const api = { analyze, suggest };

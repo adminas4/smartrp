@@ -17,3 +17,5 @@ app.include_router(pricing_router)
 
 from app.api.estimate import router as estimate_router
 app.include_router(estimate_router)
+from app.api import progress as progress
+app.include_router(progress.router, prefix="/api/progress")

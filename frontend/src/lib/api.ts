@@ -1,23 +1,25 @@
-export type ApiResponse<T> = { data: T };
+type Json = Record<string, any>;
 
-const BASE = "/api";
-
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<ApiResponse<T>> {
-  const url = path.startsWith("/") ? `${BASE}${path}` : `${BASE}/${path}`;
-  const res = await fetch(url, {
-    method,
-    headers: { "content-type": "application/json" },
-    body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+async function post<T = any>(url: string, body: Json): Promise<T> {
+  const res = await fetch(`${url}?v=${Date.now()}`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+      "pragma": "no-cache",
+      "cache-control": "no-cache",
+    },
+    body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${method} ${url} failed: ${res.status} ${text}`);
-  }
-  const data = (await res.json()) as T;
-  return { data };
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 export const api = {
-  get:  <T = unknown>(path: string) => request<T>("GET", path),
-  post: <T = unknown>(path: string, body?: unknown) => request<T>("POST", path, body),
+  analyze: (p: { description: string; locale?: string }) =>
+    post("/api/estimate/analyze", {
+      description: p.description,
+      locale: p.locale || "nb",
+    }),
+  suggest: (payload: Json) => post("/api/estimate/recalculate", payload),
 };

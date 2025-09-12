@@ -1,7 +1,7 @@
 // frontend/src/App.tsx
 import Nav from "./components/Nav";
 import Hero from "./components/Hero";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "./lib/api";
 import Totals from "./components/Totals";
 import Pricing from "./components/Pricing";
@@ -38,10 +38,10 @@ const SAMPLES = [
 const empty: AnalyserResponse = { materials: [], workflow: [], crew: [], tools: [] };
 
 type PricingParams = {
-  labor_rate: number;       // NOK/h
-  material_markup: number;  // 0.15 = +15%
-  overhead_pct: number;     // 0.10 = +10%
-  profit_pct: number;       // 0.10 = +10%
+  labor_rate: number;
+  material_markup: number;
+  overhead_pct: number;
+  profit_pct: number;
   currency: string;
 };
 
@@ -53,6 +53,38 @@ const DEFAULT_PARAMS: PricingParams = {
   currency: "NOK",
 };
 
+// --- helpers: no-cache fetch + normalizatorius ---
+async function fetchAnalyze(description: string): Promise<any> {
+  const url = `/api/estimate/analyze?v=${Date.now()}`;
+  const res = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+      pragma: "no-cache",
+      "cache-control": "no-cache",
+    },
+    body: JSON.stringify({ description, locale: "nb" }),
+  });
+  return res.json();
+}
+
+function normalizeAnalyze(r: any): AnalyserResponse {
+  const pick = (keys: string[]) => {
+    for (const k of keys) {
+      const v = r?.[k];
+      if (Array.isArray(v)) return v;
+    }
+    return [];
+  };
+  return {
+    materials: pick(["materials", "m"]),
+    workflow: pick(["workflow", "w", "tasks"]),
+    crew: pick(["crew", "manpower", "team"]),
+    tools: pick(["tools", "equipment", "tooling"]),
+  };
+}
+
 export default function App() {
   const [desc, setDesc] = useState("");
   const [sample, setSample] = useState<string>("");
@@ -61,18 +93,54 @@ export default function App() {
   const [loading, setLoading] = useState<"idle" | "analyze" | "recalc" | "export">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  // Tarifų būsena
   const [params, setParams] = useState<PricingParams>(DEFAULT_PARAMS);
   function setParam<K extends keyof PricingParams>(key: K, val: PricingParams[K]) {
     setParams((p) => ({ ...p, [key]: val }));
   }
 
+  // SAFE ARRAYS
+  const mats = Array.isArray(data?.materials) ? data.materials : [];
+  const wf   = Array.isArray(data?.workflow)  ? data.workflow  : [];
+  const cr   = Array.isArray(data?.crew)      ? data.crew      : [];
+  const tl   = Array.isArray(data?.tools)     ? data.tools     : [];
+
+  // DEBUG
+  console.log("LEN", { m: mats.length, w: wf.length, c: cr.length, t: tl.length });
+
+  useEffect(() => {}, [mats, wf, cr, tl]);
+
+  // --- ANALYZE ---
   async function doAnalyser() {
     try {
       setError(null);
       setLoading("analyze");
-      const r = await api.post<AnalyserResponse>("/estimate/analyze", { description: desc });
-      setData(r.data);
+
+      const d =
+        (desc || "").trim() ||
+        SAMPLES[1] ||
+        SAMPLES[0] ||
+        "garasje 50 m² med plate på mark";
+      if (!(desc || "").trim()) setDesc(d);
+
+      // 1 kvietimas
+      let r = await fetchAnalyze(d);
+      let analyzed = normalizeAnalyze(r);
+
+      // jei trūksta crew/tools, 1 kartą bandom dar
+      if (analyzed.crew.length === 0 || analyzed.tools.length === 0) {
+        const r2 = await fetchAnalyze(d);
+        const a2 = normalizeAnalyze(r2);
+        if (analyzed.crew.length === 0) analyzed.crew = a2.crew;
+        if (analyzed.tools.length === 0) analyzed.tools = a2.tools;
+      }
+
+      setData(analyzed);
+      console.log("[doAnalyser] setData:", {
+        m: analyzed.materials.length,
+        w: analyzed.workflow.length,
+        c: analyzed.crew.length,
+        t: analyzed.tools.length,
+      });
       setTotals(undefined);
     } catch {
       setError("Noe gikk galt under analyse.");
@@ -81,65 +149,104 @@ export default function App() {
     }
   }
 
-  // Perskaičiavimas per /api/pricing/suggest
+  // --- RECALC (local only) ---
   async function doRecalc() {
-    try {
-      setError(null);
-      setLoading("recalc");
-      const r = await api.post("/pricing/suggest", { ...data, params });
-      const lines = r.data?.lines || {};
-      const total = r.data?.total ?? 0;
-      setTotals({
-        materials: Number(lines.materials || 0),
-        labor: Number(lines.labor || 0),
-        tools: Number(lines.tools || 0),
-        overhead: Number(lines.overhead || 0),
-        profit: Number(lines.profit || 0),
-        total: Number(total || 0),
-        currency: r.data?.currency || "NOK",
-      } as any);
-    } catch {
-      setError("Noe gikk galt under prisberegning.");
-    } finally {
-      setLoading("idle");
-    }
+    setError(null);
+    setLoading("recalc");
+
+    const toFrac = (v: any) => {
+      const n = Number(v);
+      if (!isFinite(n) || isNaN(n)) return 0;
+      return n > 1 ? n / 100 : n;
+    };
+
+    // vietiniam skaičiavimui API nereikia
+    const labor_hours     = wf.reduce((s, w) => s + Number(w?.hours || 0), 0);
+    const labor_total     = labor_hours * Number(params.labor_rate || 0);
+
+    const base_mat        = mats.reduce((s, m) => s + Number(m?.price || 0) * Number(m?.qty || 0), 0);
+    const materials_total = base_mat * (1 + toFrac(params.material_markup));
+
+    const tools_total     = 0; // jei reikės, pridėsim
+    const subtotal        = labor_total + materials_total + tools_total;
+
+    const overhead_total  = subtotal * toFrac(params.overhead_pct);
+    const profit_total    = (subtotal + overhead_total) * toFrac(params.profit_pct);
+    const total           = subtotal + overhead_total + profit_total;
+
+    setTotals({
+      materials: Number(materials_total.toFixed(2)),
+      labor:     Number(labor_total.toFixed(2)),
+      tools:     Number(tools_total.toFixed(2)),
+      overhead:  Number(overhead_total.toFixed(2)),
+      profit:    Number(profit_total.toFixed(2)),
+      total:     Number(total.toFixed(2)),
+      currency:  params.currency || "NOK",
+    } as any);
+
+    setLoading("idle");
   }
 
+  // EDITORS
   function updateMat(i: number, patch: Partial<Material>) {
-    const next = structuredClone(data);
+    const next = structuredClone ? structuredClone(data) : JSON.parse(JSON.stringify(data));
+    if (!next.materials[i]) return;
     Object.assign(next.materials[i], patch);
     setData(next);
   }
   function updateWf(i: number, patch: Partial<WorkflowItem>) {
-    const next = structuredClone(data);
+    const next = structuredClone ? structuredClone(data) : JSON.parse(JSON.stringify(data));
+    if (!next.workflow[i]) return;
     Object.assign(next.workflow[i], patch);
     setData(next);
   }
   function updateCrew(i: number, patch: Partial<CrewMember>) {
-    const next = structuredClone(data);
+    const next = structuredClone ? structuredClone(data) : JSON.parse(JSON.stringify(data));
+    if (!next.crew[i]) return;
     Object.assign(next.crew[i], patch);
     setData(next);
   }
   function updateTool(i: number, patch: Partial<Tool>) {
-    const next = structuredClone(data);
+    const next = structuredClone ? structuredClone(data) : JSON.parse(JSON.stringify(data));
+    if (!next.tools[i]) return;
     Object.assign(next.tools[i], patch);
     setData(next);
   }
 
-  const co2Data = data.materials.map((m) => ({
-    name: m.name || "?",
-    kg: Number(m.qty ?? 0) * 1.5,
-  }));
+  // CO₂ demo
+  const co2Data = mats.map((m) => ({ name: m.name || "?", kg: Number(m.qty ?? 0) * 1.5 }));
   const co2Total = co2Data.reduce((s, x) => s + x.kg, 0);
 
   async function runAnalyserWithDesc(d: string) {
     try {
       setError(null);
       setLoading("analyze");
-      const r = await api.post<AnalyserResponse>("/estimate/analyze", { description: d });
-      setData(r.data);
+
+      let description = String(d || "").trim();
+      if (!description && typeof document !== "undefined") {
+        const t = document.querySelector("textarea") as HTMLTextAreaElement | null;
+        if (t?.value) description = String(t.value).trim();
+      }
+      if (!description) description = "garasje 50 m² med plate på mark";
+
+      // 1 kvietimas
+      let r = await fetchAnalyze(description);
+      let a = normalizeAnalyze(r);
+
+      // pakartojimas jei trūksta
+      if (a.crew.length === 0 || a.tools.length === 0) {
+        const r2 = await fetchAnalyze(description);
+        const a2 = normalizeAnalyze(r2);
+        if (a.crew.length === 0) a.crew = a2.crew;
+        if (a.tools.length === 0) a.tools = a2.tools;
+      }
+
+      setData(a);
+      console.log("[runAnalyserWithDesc] setData:", {
+        m: a.materials.length, w: a.workflow.length, c: a.crew.length, t: a.tools.length,
+      });
       setTotals(undefined);
-      return r.data;
+      return a;
     } catch {
       setError("Noe gikk galt under analyse.");
       return empty;
@@ -156,6 +263,13 @@ export default function App() {
   }
 
   async function onExportPdf() {
+    try {
+      setLoading("export");
+      exportPdf(desc, data, totals);
+    } finally {
+      setLoading("idle");
+    }
+  }
 
   async function runDemoAll() {
     const s = SAMPLES[1] || SAMPLES[0];
@@ -163,14 +277,6 @@ export default function App() {
     await runAnalyserWithDesc(s);
     await doRecalc();
     await onExportPdf();
-  }
-
-    try {
-      setLoading("export");
-      exportPdf(desc, data, totals);
-    } finally {
-      setLoading("idle");
-    }
   }
 
   return (
@@ -248,53 +354,23 @@ export default function App() {
           style={{ width: "100%" }}
         />
         <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button className="btn btn-primary" onClick={runDemoAll} disabled={loading!=="idle"}>
-            Kino demo (60s)
-          </button>
-          <select
-            value={sample}
-            onChange={(e) => setSample(e.target.value)}
-            style={{ padding: 6, minWidth: 260 }}
-            disabled={loading !== "idle"}
-          >
+          <button className="btn btn-primary" onClick={runDemoAll} disabled={loading !== "idle"}>Kino demo (60s)</button>
+          <select value={sample} onChange={(e) => setSample(e.target.value)} style={{ padding: 6, minWidth: 260 }} disabled={loading !== "idle"}>
             <option value="">Eksempel…</option>
-            {SAMPLES.map((s, i) => (
-              <option key={i} value={s}>{s}</option>
-            ))}
+            {SAMPLES.map((s, i) => (<option key={i} value={s}>{s}</option>))}
           </select>
-
-          <button
-            className="btn btn-ghost"
-            onClick={useSample}
-            disabled={loading !== "idle" || !sample}
-          >
+          <button className="btn btn-ghost" onClick={useSample} disabled={loading !== "idle" || !sample}>
             {loading !== "idle" ? "Laster…" : "Bruk eksempel"}
           </button>
-
-          <button
-            className="btn btn-ghost"
-            onClick={doAnalyser}
-            disabled={loading !== "idle" || !desc.trim()}
-          >
+          <button className="btn btn-ghost" onClick={doAnalyser} disabled={loading !== "idle"}>
             {loading === "analyze" ? "Laster…" : "Analyser"}
           </button>
-
-          <button
-            className="btn btn-primary"
-            onClick={doRecalc}
-            disabled={loading !== "idle" || (!data.materials.length && !data.workflow.length)}
-          >
+          <button className="btn btn-primary" onClick={doRecalc} disabled={loading !== "idle" || (!mats.length && !wf.length)}>
             {loading === "recalc" ? "Laster…" : "Beregn pris"}
           </button>
-
-          <button
-            className="btn btn-primary"
-            disabled={loading !== "idle" || (!data.materials.length && !data.workflow.length)}
-            onClick={onExportPdf}
-          >
+          <button className="btn btn-primary" disabled={loading !== "idle" || (!mats.length && !wf.length)} onClick={onExportPdf}>
             {loading === "export" ? "Laster…" : "Eksporter PDF"}
           </button>
-
           {error ? <span style={{ color: "#b00020", marginLeft: 8 }}>{error}</span> : null}
         </div>
       </section>
@@ -304,35 +380,13 @@ export default function App() {
         <div>
           <h3>Materialer</h3>
           <table width="100%" border={1} cellPadding={6}>
-            <thead>
-              <tr>
-                <th>Navn</th>
-                <th>Mengde</th>
-                <th>Enhet</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Navn</th><th>Mengde</th><th>Enhet</th></tr></thead>
             <tbody>
-              {data.materials.map((m, i) => (
+              {mats.map((m, i) => (
                 <tr key={i}>
-                  <td>
-                    <input
-                      value={m.name ?? ""}
-                      onChange={(e) => updateMat(i, { name: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={m.qty ?? 0}
-                      onChange={(e) => updateMat(i, { qty: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={m.unit ?? ""}
-                      onChange={(e) => updateMat(i, { unit: e.target.value })}
-                    />
-                  </td>
+                  <td><input value={m.name ?? ""} onChange={(e) => updateMat(i, { name: e.target.value })} /></td>
+                  <td><input type="number" value={m.qty ?? 0} onChange={(e) => updateMat(i, { qty: Number(e.target.value) })} /></td>
+                  <td><input value={m.unit ?? ""} onChange={(e) => updateMat(i, { unit: e.target.value })} /></td>
                 </tr>
               ))}
             </tbody>
@@ -342,28 +396,12 @@ export default function App() {
         <div>
           <h3>Arbeidsflyt</h3>
           <table width="100%" border={1} cellPadding={6}>
-            <thead>
-              <tr>
-                <th>Oppgave</th>
-                <th>Timer</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Oppgave</th><th>Timer</th></tr></thead>
             <tbody>
-              {data.workflow.map((w, i) => (
+              {wf.map((w, i) => (
                 <tr key={i}>
-                  <td>
-                    <input
-                      value={w.task ?? ""}
-                      onChange={(e) => updateWf(i, { task: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={w.hours ?? 0}
-                      onChange={(e) => updateWf(i, { hours: Number(e.target.value) })}
-                    />
-                  </td>
+                  <td><input value={w.task ?? ""} onChange={(e) => updateWf(i, { task: e.target.value })} /></td>
+                  <td><input type="number" value={w.hours ?? 0} onChange={(e) => updateWf(i, { hours: Number(e.target.value) })} /></td>
                 </tr>
               ))}
             </tbody>
@@ -373,28 +411,12 @@ export default function App() {
         <div>
           <h3>Mannskap</h3>
           <table width="100%" border={1} cellPadding={6}>
-            <thead>
-              <tr>
-                <th>Rolle</th>
-                <th>Antall</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Rolle</th><th>Antall</th></tr></thead>
             <tbody>
-              {data.crew.map((c, i) => (
+              {cr.map((c, i) => (
                 <tr key={i}>
-                  <td>
-                    <input
-                      value={c.role ?? ""}
-                      onChange={(e) => updateCrew(i, { role: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={c.count ?? 0}
-                      onChange={(e) => updateCrew(i, { count: Number(e.target.value) })}
-                    />
-                  </td>
+                  <td><input value={c.role ?? ""} onChange={(e) => updateCrew(i, { role: e.target.value })} /></td>
+                  <td><input type="number" value={c.count ?? 0} onChange={(e) => updateCrew(i, { count: Number(e.target.value) })} /></td>
                 </tr>
               ))}
             </tbody>
@@ -404,28 +426,12 @@ export default function App() {
         <div>
           <h3>Verktøy</h3>
           <table width="100%" border={1} cellPadding={6}>
-            <thead>
-              <tr>
-                <th>Navn</th>
-                <th>Dager</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Navn</th><th>Dager</th></tr></thead>
             <tbody>
-              {data.tools.map((t, i) => (
+              {tl.map((t, i) => (
                 <tr key={i}>
-                  <td>
-                    <input
-                      value={t.name ?? ""}
-                      onChange={(e) => updateTool(i, { name: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={t.days ?? 0}
-                      onChange={(e) => updateTool(i, { days: Number(e.target.value) })}
-                    />
-                  </td>
+                  <td><input value={t.name ?? ""} onChange={(e) => updateTool(i, { name: e.target.value })} /></td>
+                  <td><input type="number" value={t.days ?? 0} onChange={(e) => updateTool(i, { days: Number(e.target.value) })} /></td>
                 </tr>
               ))}
             </tbody>
@@ -439,7 +445,7 @@ export default function App() {
         <Totals totals={totals} />
       </section>
 
-      {/* ESG grafikas */}
+      {/* ESG */}
       <section className="card mt-6">
         <h3>ESG / CO₂</h3>
         {co2Data.length ? (
@@ -457,12 +463,10 @@ export default function App() {
               </ResponsiveContainer>
             </div>
           </>
-        ) : (
-          <p>Ingen data.</p>
-        )}
+        ) : <p>Ingen data.</p>}
       </section>
 
-      <Pricing data={data} onTotals={setTotals} />
+      <Pricing data={{ ...data, materials: mats, workflow: wf, crew: cr, tools: tl }} onTotals={setTotals} />
       <Progress />
       <About />
     </div>
