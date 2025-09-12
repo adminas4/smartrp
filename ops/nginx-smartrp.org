@@ -16,7 +16,7 @@ server {
 
     # Health (exact)
     location = /api/progress/health  { return 204; }
-    location = /api/progress/healthz { alias /srv/smartrp/frontend/dist/healthz.json; default_type application/json; add_header Cache-Control "no-store" always; }
+    location = /api/progress/healthz { return 302 /api/progress/healthz.json; }
 
     # API proxy
     location /api/ { include snippets/smartrp_api_proxy.conf; }
