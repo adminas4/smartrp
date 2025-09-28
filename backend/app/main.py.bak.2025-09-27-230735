@@ -1,0 +1,9 @@
+from fastapi import FastAPI
+from app.api import agent, estimate, pricing, progress, admin  # turi turėti .router viduje
+
+app = FastAPI()
+
+# Visi routeriai turi būti įtraukti čia (naudojame jų vidinius prefixus)
+for r in (agent.router, estimate.router, pricing.router, progress.router, admin.router):
+    app.include_router(r)
+app.include_router(progress.router, prefix="/api/progress")

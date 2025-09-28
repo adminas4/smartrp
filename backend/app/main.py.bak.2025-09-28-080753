@@ -3,10 +3,12 @@ from app.api import agent, estimate, pricing, progress, admin
 
 app = FastAPI()
 
-# Šitie routeriai naudoja savo prefix'us viduje
+# Routeriai naudoja SAVO vidinius prefixus (pvz., estimate turi /api/estimate)
 for r in (agent.router, estimate.router, pricing.router, admin.router):
     app.include_router(r)
 
-# Health montuojam ir be prefikso, ir su /api/progress
+# Health maršrutizatorių montuojame dvigubai:
+#  - legacy be prefikso (/healthz, /health, /healthz.json)
+#  - ir vardiniu prefiksu (/api/progress/healthz)
 app.include_router(progress.router)
 app.include_router(progress.router, prefix="/api/progress")

@@ -1,0 +1,150 @@
+from fastapi import APIRouter
+router = APIRouter(prefix="/api/estimate", tags=["estimate"])
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import Optional, Any, Dict
+import logging
+
+logger = logging.getLogger("estimate")
+router = APIRouter(prefix="/api/estimate", tags=["estimate"])
+
+class AnalyzeRequest(BaseModel):
+    description: str
+    locale: Optional[str] = "nb"
+
+def _expand_scope(desc: str, locale: str) -> str:
+    d = desc.lower()
+    if (("garasje" in d or "garasj" in d) and ("plate på mark" in d or "plate pa mark" in d or "slab" in d)):
+        desc += """
+Forstå at dette er komplett nybygg av garasje med plate på mark.
+Lag FULL liste: grunnarbeid/ringmur/plate (utgraving, pukk, EPS S80 100 mm, radonduk, armeringsnett K131, betong C25 100 mm, L-elementer),
+bindingsverk 48x148, vindsperre, isolasjon ~150 mm, dampsperre, kledning,
+takstoler, undertak/lekter, takpapp SBS, takrenner/nedløp,
+åpninger (leddport 2,4×2,1, ytterdør 9×21, 2 vinduer 10×10),
+festemateriell/småvarer. Fordel arbeid: betongarbeider + tømrer. Inkluder verktøy.
+"""
+    return desc
+
+def _safe_gpt_analyze(desc: str, locale: str) -> Dict[str, Any]:
+    try:
+        if '_analyze_with_gpt' in globals():
+            logger.info("estimate: calling GPT")
+            return _analyze_with_gpt(desc, locale)
+    except Exception:
+        logger.exception("estimate: GPT analyze failed, using fallback")
+
+    # Minimalus fallback, kad API nenumirtų
+    return {
+        "materials": [{"name": "Takpapp SBS", "unit": "m²", "qty": 120}],
+        "workflow": [{"task": "Taktekking papp", "hours": 8}],
+        "crew": [{"role": "Taktekker", "count": 2}],
+        "tools": ["Varmluftspistol", "Valsai"]
+    }
+
+async def analyze_old(req: AnalyzeRequest):
+    desc = _expand_scope(req.description, req.locale or "nb")
+    return _safe_gpt_analyze(desc, req.locale or "nb")
+
+from typing import Any
+
+async def analyze_old(req: "AnalyzeRequest") -> Any:
+    import logging, os
+    lg = logging.getLogger("estimate")
+    lg.info(
+        "ANALYZE env: KEY=%s MODEL=%s",
+        "set" if os.getenv("OPENAI_API_KEY") else "missing",
+        os.getenv("OPENAI_MODEL_ANALYZE") or os.getenv("GPT_MODEL") or "n/a",
+    )
+    try:
+        desc = _expand_scope(req.description, req.locale or "nb") if "_expand_scope" in globals() else req.description
+        out = _analyze_with_gpt(desc, req.locale or "nb")
+        lg.info("USING GPT")
+    except Exception:
+        lg.exception("GPT analyze failed")
+        if "_demo_out_for" in globals():
+            out = _demo_out_for(req.description, req.locale or "nb")
+        else:
+            # minimal fallback (nebebus tik terasa)
+            out = {
+                "materials": [
+                    {"name":"EPS S80 100 mm","unit":"m²","qty":50},
+                    {"name":"Radonduk","unit":"m²","qty":50},
+                    {"name":"Armeringsnett K131","unit":"m²","qty":50},
+                    {"name":"Betong C25 100 mm","unit":"m³","qty":5},
+                    {"name":"L-elementer","unit":"lm","qty":28},
+                    {"name":"Bindingsverk 48x148","unit":"m²","qty":50},
+                    {"name":"Vindsperre","unit":"m²","qty":50},
+                    {"name":"Isolasjon ~150 mm","unit":"m²","qty":50},
+                    {"name":"Dampsperre","unit":"m²","qty":50},
+                    {"name":"Kledning","unit":"m²","qty":60},
+                    {"name":"Takstoler","unit":"stk","qty":10},
+                    {"name":"Undertak/lekter","unit":"m²","qty":50},
+                    {"name":"Takpapp SBS","unit":"m²","qty":50},
+                    {"name":"Takrenner/nedløp","unit":"lm","qty":20},
+                    {"name":"Leddport 2,4×2,1","unit":"stk","qty":1},
+                    {"name":"Ytterdør 9×21","unit":"stk","qty":1},
+                    {"name":"Vinduer 10×10","unit":"stk","qty":2},
+                    {"name":"Festemateriell/småvarer","unit":"sum","qty":1}
+                ],
+                "workflow":[
+                    {"task":"Betongarbeider","hours":24},
+                    {"task":"Tømrerarbeider","hours":60}
+                ],
+                "crew":[{"role":"Betongarbeider","count":2},{"role":"Tømrer","count":2}],
+                "tools":["Blander","Vibroplata","Sag","Skrutrekker"]
+            }
+        lg.info("USING DEMO")
+    return out
+
+from typing import Any
+
+@router.post("/analyze")
+async def analyze(req: "AnalyzeRequest") -> Any:
+    import logging, os
+    lg = logging.getLogger("estimate")
+    lg.info(
+        "ANALYZE env: KEY=%s MODEL=%s",
+        "set" if os.getenv("OPENAI_API_KEY") else "missing",
+        os.getenv("OPENAI_MODEL_ANALYZE") or os.getenv("GPT_MODEL") or "n/a",
+    )
+    try:
+        desc = _expand_scope(req.description, req.locale or "nb") if "_expand_scope" in globals() else req.description
+        out = _analyze_with_gpt(desc, req.locale or "nb")
+        lg.info("USING GPT")
+    except Exception:
+        lg.exception("GPT analyze failed")
+        if "_demo_out_for" in globals():
+            out = _demo_out_for(req.description, req.locale or "nb")
+        else:
+            # minimal fallback (nebebus tik terasa)
+            out = {
+                "materials": [
+                    {"name":"EPS S80 100 mm","unit":"m²","qty":50},
+                    {"name":"Radonduk","unit":"m²","qty":50},
+                    {"name":"Armeringsnett K131","unit":"m²","qty":50},
+                    {"name":"Betong C25 100 mm","unit":"m³","qty":5},
+                    {"name":"L-elementer","unit":"lm","qty":28},
+                    {"name":"Bindingsverk 48x148","unit":"m²","qty":50},
+                    {"name":"Vindsperre","unit":"m²","qty":50},
+                    {"name":"Isolasjon ~150 mm","unit":"m²","qty":50},
+                    {"name":"Dampsperre","unit":"m²","qty":50},
+                    {"name":"Kledning","unit":"m²","qty":60},
+                    {"name":"Takstoler","unit":"stk","qty":10},
+                    {"name":"Undertak/lekter","unit":"m²","qty":50},
+                    {"name":"Takpapp SBS","unit":"m²","qty":50},
+                    {"name":"Takrenner/nedløp","unit":"lm","qty":20},
+                    {"name":"Leddport 2,4×2,1","unit":"stk","qty":1},
+                    {"name":"Ytterdør 9×21","unit":"stk","qty":1},
+                    {"name":"Vinduer 10×10","unit":"stk","qty":2},
+                    {"name":"Festemateriell/småvarer","unit":"sum","qty":1}
+                ],
+                "workflow":[
+                    {"task":"Betongarbeider","hours":24},
+                    {"task":"Tømrerarbeider","hours":60}
+                ],
+                "crew":[{"role":"Betongarbeider","count":2},{"role":"Tømrer","count":2}],
+                "tools":["Blander","Vibroplata","Sag","Skrutrekker"]
+            }
+        lg.info("USING DEMO")
+    return out

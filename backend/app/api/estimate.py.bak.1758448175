@@ -1,0 +1,599 @@
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+import os, json, re, math, urllib.request, time, random
+
+router = APIRouter()
+
+class Material(BaseModel):
+    name: str
+    qty: float
+    unit: Optional[str] = None
+    price: Optional[float] = None
+
+class Workflow(BaseModel):
+    task: str
+    hours: float
+
+class Crew(BaseModel):
+    role: str
+    count: int
+
+class Tool(BaseModel):
+    name: str
+    days: float = 0
+
+class AnalyzeRequest(BaseModel):
+    description: str
+    locale: Optional[str] = "nb"
+
+# --- OpenAI helper ---
+def _openai_chat_json(model: str, messages: list, temperature: float = 0.1, max_tokens: int = 900) -> Dict[str, Any]:
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "response_format": {"type": "json_object"},
+        "max_tokens": max_tokens,
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    return json.loads(body["choices"][0]["message"]["content"])
+
+# --- Įrankių katalogas + praplėtimas ---
+TOOL_MAP: Dict[str, List[str]] = {
+    r"(terrasse|tre|dekc?k)": [
+        "Drill/slagtrekker","Sirkelsag","Bordsag (opsjon)","Krysslaser",
+        "Målebånd","Vater","Avstandskiler","Borspisser/bits","Skrutvinger",
+        "Hørselvern","Hansker"
+    ],
+    r"(grunn|graving|planering)": [
+        "Gravemaskin","Laser","Spade","Stikkspade","Trillebår"
+    ],
+    r"(betong|st[øo]p)": [
+        "Betongblander","Platevibrator","Rettholt","Betongvibrator",
+        "Glattere","Forskaling","Bøtte","Spade","Trillebår"
+    ],
+    r"(isolasjon|isolering)": [
+        "Kniv for isolasjon","Stiftepistol","Støvmaske","Hansker"
+    ],
+    r"(fukt|membran|dampsperre)": [
+        "Varmluftpistol","Rulle","Kniv","Stiftepistol"
+    ],
+}
+
+HEAVY_SET = {"Gravemaskin","Betongblander","Platevibrator"}
+
+def _enrich_tools(description: str, out: Dict[str, Any]) -> None:
+    """Papildo GPT grąžintus įrankius pagal darbų/teksto raktažodžius."""
+    text = (description or "") + " " + " ".join([w.get("task","") for w in out.get("workflow",[])])
+    tools: Dict[str, float] = {}
+
+    # jau esami
+    for t in out.get("tools", []) or []:
+        name = str(t.get("name","")).strip()
+        if not name: continue
+        tools[name] = max(tools.get(name, 0), float(t.get("days") or 1))
+
+    # pagal žodžius
+    for pat, lst in TOOL_MAP.items():
+        if re.search(pat, text, re.I):
+            for name in lst:
+                days = 1.0
+                if name in HEAVY_SET:
+                    # grubus vertinimas: sunkiai technikai – bent 1 d. arba pagal dulkių val. sumą
+                    tot_h = sum([float(w.get("hours") or 0) for w in out.get("workflow",[])])
+                    days = max(1.0, math.ceil(tot_h/8.0))
+                tools[name] = max(tools.get(name, 0), days)
+
+    # atgal į out
+    out["tools"] = [Tool(name=n, days=d).dict() for n,d in sorted(tools.items())]
+
+def _analyze_with_gpt(description: str, locale: str = "nb") -> Dict[str, Any]:
+    model = os.environ.get("OPENAI_MODEL_ANALYZE", "gpt-4o")
+    sys = (
+        "Du er en norsk bygg-kalkulatør. Ekstrahér realistiske lister over "
+        "materialer, arbeidsoppgaver, mannskap og verktøy for prosjekt i Norge. "
+        "Svar KUN som JSON (materials, workflow, crew, tools). Minst 6 materialer, 3 oppgaver."
+    )
+    usr = (
+        f"Beskrivelse (språk={locale}): {description}\n"
+        "Returnér KUN JSON:\n"
+        "{\n"
+        '  "materials":[{"name":"...","qty":number,"unit":"m²|lm|stk|kg","price":null},...],\n'
+        '  "workflow":[{"task":"...","hours":number},...],\n'
+        '  "crew":[{"role":"Snekker|Elektriker|...","count":number},...],\n'
+        '  "tools":[{"name":"...","days":number},...]\n'
+        "}\n"
+    )
+    data = _openai_chat_json_with_retry(model, [
+        {"role":"system","content":sys},
+        {"role":"user","content":usr},
+    ])
+
+    out = {
+        "materials": data.get("materials") or [],
+        "workflow":  data.get("workflow") or [],
+        "crew":      data.get("crew") or [],
+        "tools":     data.get("tools") or [],
+    }
+
+    
+# Minimalus demo-fallback
+    if len(out["materials"]) < 3 or len(out["workflow"]) < 2:
+        return _demo_out_for(description, locale)
+
+    # tipizavimas
+
+    out["materials"] = [Material(**m).dict() for m in out["materials"] if isinstance(m, dict)]
+    out["workflow"]  = [Workflow(**w).dict() for w in out["workflow"] if isinstance(w, dict)]
+    out["crew"]      = [Crew(**c).dict() for c in out["crew"] if isinstance(c, dict)]
+    out["tools"]     = [Tool(**t).dict() for t in out["tools"] if isinstance(t, dict)]
+
+    # praplėsti įrankius
+    return _postprocess(description, out)
+
+@router.post("/api/estimate/analyze")
+async def analyze(req: AnalyzeRequest) -> Dict[str, Any]:
+    try:
+        import os
+        if not os.environ.get("OPENAI_API_KEY"):
+            out = _demo_out()
+        _enrich_tools(req.description, out)
+        _enrich_crew(req.description, out)
+        return out
+        return _analyze_with_gpt(req.description, req.locale or "nb")
+    except Exception:
+        out = _demo_out()
+        _enrich_tools(req.description, out)
+        _enrich_crew(req.description, out)
+        return out
+
+def _demo_out():
+    return {
+        "materials":[
+            {"name":"Terrassebord impregnert 28x120","qty":10,"unit":"m²","price":None},
+            {"name":"Bjelker/dragere C24","qty":35,"unit":"lm","price":None},
+            {"name":"Bjelkesko/beslag","qty":24,"unit":"stk","price":None},
+            {"name":"Stolper 90x90","qty":6,"unit":"stk","price":None},
+            {"name":"Punktfundament/betong","qty":6,"unit":"stk","price":None},
+            {"name":"Skruer terrasse A2","qty":600,"unit":"stk","price":None},
+        ],
+        "workflow":[
+            {"task":"Oppmåling og fundamenter","hours":6},
+            {"task":"Bjelkelag og dragere","hours":8},
+            {"task":"Montering terrassebord","hours":10},
+        ],
+        "crew":[{"role":"Snekker","count":2}],
+        "tools":[{"name":"Drill/slagtrekker","days":1},{"name":"Sirkelsag","days":1}],
+    }
+@router.post("/api/estimate/analyze_llm")
+async def analyze_llm(req: AnalyzeRequest) -> Dict[str, Any]:
+    import os
+    model = os.environ.get("OPENAI_MODEL_ANALYZE","gpt-4o")
+    try:
+        out = _analyze_with_gpt(req.description, req.locale or "nb")
+        out["_mode"] = "gpt"
+        out["_model"] = model
+        return out
+    except Exception as e:
+        return {"_mode":"error","_model":model,"error":str(e)}
+@router.post("/api/estimate/analyze_llm")
+async def analyze_llm(req: AnalyzeRequest) -> Dict[str, Any]:
+    import os
+    model = os.environ.get("OPENAI_MODEL_ANALYZE","gpt-4o")
+    try:
+        out = _analyze_with_gpt(req.description, req.locale or "nb")
+        out["_mode"] = "gpt"
+        out["_model"] = model
+        return out
+    except Exception as e:
+        return {"_mode":"error","_model":model,"error":str(e)}
+def _openai_chat_json_with_retry(model: str, messages: list, temperature: float = 0.1, max_tokens: int = 900, tries: int = 5):
+    last = None
+    for i in range(tries):
+        try:
+            return _openai_chat_json(model, messages, temperature, max_tokens)
+        except Exception as e:
+            last = e
+            import urllib.error
+            if isinstance(e, urllib.error.HTTPError) and getattr(e, "code", 0) in (429, 500, 502, 503, 504):
+                try:
+                    ra = float(getattr(e, "headers", {}).get("Retry-After", "0"))
+                except Exception:
+                    ra = 0.0
+                base = 0.25 * (2 ** i)
+                jitter = random.uniform(0, 0.25)
+                time.sleep(ra + base + jitter)
+                continue
+            time.sleep(0.3 + 0.2 * i)
+            continue
+    raise last
+@router.post("/api/estimate/analyze_llm2")
+async def analyze_llm2(req: AnalyzeRequest) -> Dict[str, Any]:
+    import os, urllib.error
+    model = os.environ.get("OPENAI_MODEL_ANALYZE","gpt-4o")
+    try:
+        out = _analyze_with_gpt(req.description, req.locale or "nb")
+        out["_mode"] = "gpt"
+        out["_model"] = model
+        return out
+    except urllib.error.HTTPError as e:
+        if getattr(e, "code", 0) == 429:
+            out = _demo_out()
+            out["_mode"] = "demo-429"
+            out["_model"] = model
+            return out
+        return {"_mode":"error","_model":model,"error":str(e)}
+    except Exception as e:
+        return {"_mode":"error","_model":model,"error":str(e)}
+
+def _enrich_crew(description: str, out: Dict[str, Any]) -> None:
+    text = ((description or "") + " " + " ".join([w.get("task","") for w in out.get("workflow",[])])).lower()
+    crew = {}
+    for c in (out.get("crew") or []):
+        role = (c.get("role") or "").strip()
+        if role:
+            crew[role] = max(int(c.get("count") or 1), crew.get(role, 0))
+
+    def add(role: str, n: int = 1):
+        if role:
+            crew[role] = max(crew.get(role, 0), n)
+
+    # Vonios/våtrumai
+    if re.search(r"\b(bad|baderom|våtrom|flis|membran)\b", text):
+        add("Elektriker"); add("Rørlegger")
+    # Elektra
+    if re.search(r"\b(el|elektrisk|stikk|kurs|sikringsskap)\b", text):
+        add("Elektriker")
+    # Santechnika
+    if re.search(r"\b(rør|vann|avløp|sluk)\b", text):
+        add("Rørlegger")
+    # Betonas/plokštė
+    if re.search(r"(betong|st[øo]p|plate på mark)", text):
+        add("Betongarbeider")
+    # Stogas
+    if re.search(r"\b(tak|tekking|papp|membran på tak)\b", text):
+        add("Taktekker")
+
+    out["crew"] = [Crew(role=r, count=c).dict() for r,c in sorted(crew.items())]
+
+def _enrich_crew(description: str, out: Dict[str, Any]) -> None:
+    text = ((description or "") + " " + " ".join([w.get("task","") for w in out.get("workflow",[])])).lower()
+    crew = {}
+    for c in (out.get("crew") or []):
+        role = (c.get("role") or "").strip()
+        if role:
+            crew[role] = max(int(c.get("count") or 1), crew.get(role, 0))
+
+    def add(role: str, n: int = 1):
+        if role:
+            crew[role] = max(crew.get(role, 0), n)
+
+    if re.search(r"\b(bad|baderom|våtrom|flis|membran)\b", text):
+        add("Elektriker"); add("Rørlegger")
+    if re.search(r"\b(el|elektrisk|stikk|kurs|sikringsskap)\b", text):
+        add("Elektriker")
+    if re.search(r"\b(rør|vann|avløp|sluk)\b", text):
+        add("Rørlegger")
+    if re.search(r"(betong|st[øo]p|plate på mark)", text):
+        add("Betongarbeider")
+    if re.search(r"\b(tak|tekking|papp|membran på tak)\b", text):
+        add("Taktekker")
+
+    out["crew"] = [Crew(role=r, count=c).dict() for r,c in sorted(crew.items())]
+# ---- crew heuristic (last-wins) ----
+def _enrich_crew(description: str, out: Dict[str, Any]) -> None:
+    text = ((description or "") + " " + " ".join([w.get("task","") for w in out.get("workflow",[])])).lower()
+    crew_map: Dict[str,int] = {}
+    for c in (out.get("crew") or []):
+        role = str(c.get("role") or "").strip()
+        if role:
+            crew_map[role] = max(int(c.get("count") or 1), crew_map.get(role, 0))
+    def add(role: str, n: int = 1):
+        if role:
+            crew_map[role] = max(crew_map.get(role, 0), n)
+    if re.search(r"\b(bad|baderom|våtrom|flis|membran)\b", text):
+        add("Elektriker"); add("Rørlegger")
+    if re.search(r"\b(el|elektrisk|stikk|kurs|sikringsskap)\b", text):
+        add("Elektriker")
+    if re.search(r"\b(rør|vann|avløp|sluk)\b", text):
+        add("Rørlegger")
+    if re.search(r"(betong|st[øo]p|plate på mark)", text):
+        add("Betongarbeider")
+    if re.search(r"\b(tak|tekking|papp|membran på tak)\b", text):
+        add("Taktekker")
+    out["crew"] = [Crew(role=r, count=n).dict() for r,n in sorted(crew_map.items())]
+
+def _pick_area(desc:str, default=40):
+    import re
+    m = re.search(r'(\d+(?:[.,]\d+)?)\s*m(?:\u00B2|2)?', desc or '', re.I)  # m²/m2
+    try: return float(m.group(1).replace(',', '.')) if m else float(default)
+    except: return float(default)
+
+def _pick_thickness(desc:str, default=100):
+    import re
+    m = re.search(r'(\d+)\s*mm', desc or '', re.I)
+    try: return int(m.group(1)) if m else int(default)
+    except: return int(default)
+
+def _demo_out_for(description:str, locale:str="nb"):
+    text = (description or "").lower()
+    if re.search(r"\b(isolering|isolasjon)\b", text):
+        return {
+            "materials":[
+                {"name":"Isolasjonsmateriale 100 mm","qty":40,"unit":"m²","price":None},
+                {"name":"Dampsperre","qty":40,"unit":"m²","price":None},
+                {"name":"Stenderverk","qty":20,"unit":"lm","price":None}
+            ],
+            "workflow":[
+                {"task":"Montering av stenderverk","hours":6},
+                {"task":"Installasjon av isolasjon","hours":12},
+                {"task":"Montering av dampsperre","hours":6}
+            ],
+            "crew":[{"role":"Snekker","count":2}],
+            "tools":[{"name":"Kniv","days":1},{"name":"Stiftepistol","days":1},{"name":"Målebånd","days":1}]
+        }
+
+    d = (description or "").lower()
+    area = _pick_area(d, 40)
+    thick = _pick_thickness(d, 100)
+
+    # 1) Isolering (vidinė siena)
+    if any(k in d for k in ["isol", "innvendig isol", "isolasjon"]):
+        return {
+          "materials":[
+            {"name":f"Isolasjonsmateriale {thick} mm","qty":area,"unit":"m²","price":None},
+            {"name":"Dampsperre","qty":area,"unit":"m²","price":None},
+            {"name":"Stenderverk","qty":area*0.5,"unit":"lm","price":None},
+            {"name":"Skruer/festem.","qty":int(area*8),"unit":"stk","price":None},
+          ],
+          "workflow":[
+            {"task":"Montering av stenderverk","hours":8},
+            {"task":"Installasjon av isolasjon","hours":12},
+            {"task":"Montering av dampsperre","hours":6},
+          ],
+          "crew":[{"role":"Snekker","count":2}],
+          "tools":[
+            {"name":"Kniv","days":1},{"name":"Stiftepistol","days":1},
+            {"name":"Målebånd","days":1},{"name":"Vater","days":1}
+          ],
+        }
+
+    # 2) Bad (elektra + vandentiekis)
+    if any(k in d for k in ["bad","baderom","våtrom","flis","membran"]):
+        return {
+          "materials":[
+            {"name":"Membran + tilbehør","qty":area,"unit":"m²","price":None},
+            {"name":"Fliser","qty":area,"unit":"m²","price":None},
+            {"name":"Fugemasse/lim","qty":area*0.8,"unit":"m²","price":None},
+          ],
+          "workflow":[
+            {"task":"Underlag og membran","hours":12},
+            {"task":"Flislegging","hours":16},
+          ],
+          "crew":[{"role":"Snekker","count":1},{"role":"Elektriker","count":1},{"role":"Rørlegger","count":1}],
+          "tools":[{"name":"Flisekutter","days":1},{"name":"Bore-/skrueverktøy","days":1}],
+        }
+
+    # 3) Garasje / plokštė ant grunto
+    if any(k in d for k in ["garasje","plate på mark","betong"]):
+        return {
+          "materials":[
+            {"name":"Betong C25","qty":area*0.1,"unit":"m³","price":None},
+            {"name":"Armeringsnett","qty":area,"unit":"m²","price":None},
+            {"name":"Isolasjon XPS","qty":area,"unit":"m²","price":None},
+          ],
+          "workflow":[
+            {"task":"Graving og grunnarbeid","hours":40},
+            {"task":"Støping av betongplate","hours":30},
+          ],
+          "crew":[{"role":"Grunnarbeider","count":2},{"role":"Betongarbeider","count":2}],
+          "tools":[{"name":"Betongblander","days":1},{"name":"Vibrator","days":1}],
+        }
+
+    # 4) Stogas
+    if any(k in d for k in ["tak","tekking","papp"]):
+        return {
+          "materials":[
+            {"name":"Takpapp/tekking","qty":area,"unit":"m²","price":None},
+            {"name":"Sløyfer/lekter","qty":area*0.3,"unit":"lm","price":None},
+          ],
+          "workflow":[
+            {"task":"Riving/forberedimas","hours":10},
+            {"task":"Taktekking","hours":20},
+          ],
+          "crew":[{"role":"Taktekker","count":2}],
+          "tools":[{"name":"Varmluftpistol","days":1},{"name":"Stige/sikkerl.","days":1}],
+        }
+
+    # 5) Terrasse (senasis demo)
+    return {
+      "materials":[
+        {"name":"Terrassebord impregnert 28x120","qty":10,"unit":"m²","price":None},
+        {"name":"Bjelker/dragere C24","qty":35,"unit":"lm","price":None},
+        {"name":"Bjelkesko/beslag","qty":24,"unit":"stk","price":None},
+        {"name":"Stolper 90x90","qty":6,"unit":"stk","price":None},
+        {"name":"Punktfundament/betong","qty":6,"unit":"stk","price":None},
+        {"name":"Skruer terrasse A2","qty":600,"unit":"stk","price":None},
+      ],
+      "workflow":[
+        {"task":"Oppmåling og fundamenter","hours":6},
+        {"task":"Bjelkelag og dragere","hours":8},
+        {"task":"Montering terrassebord","hours":10},
+      ],
+      "crew":[{"role":"Snekker","count":2}],
+      "tools":[{"name":"Drill/slagtrekker","days":1},{"name":"Sirkelsag","days":1}],
+    }
+def _postprocess(description: str, out: Dict[str, Any]) -> Dict[str, Any]:
+    out["materials"] = [Material(**m).dict() for m in (out.get("materials") or []) if isinstance(m, dict)]
+    out["workflow"]  = [Workflow(**w).dict() for w in (out.get("workflow")  or []) if isinstance(w, dict)]
+    out["crew"]      = [Crew(**c).dict()     for c in (out.get("crew")      or []) if isinstance(c, dict)]
+    out["tools"]     = [Tool(**t).dict()     for t in (out.get("tools")     or []) if isinstance(t, dict)]
+    _enrich_tools(description, out)
+    out = _postprocess(description, out)
+_enrich_crew(description, out)
+    return out
+
+# --- DEMO generatorius pagal aprašymą (perrašo ankstesnį, nes apendinam vėliau) ---
+def _demo_out_for(description: str, locale: str = "nb"):
+    text = (description or "").lower()
+
+    def tools_base():
+        return [{"name": n, "days": 1.0} for n in ["Målebånd","Vater","Drill/slagtrekker","Sirkelsag"]]
+
+    # VONIA
+    if re.search(r"\b(bad|baderom|våtrom)\b", text):
+        out = {
+            "materials":[
+                {"name":"Membran våtrom", "qty":6, "unit":"m²", "price":None},
+                {"name":"Fliser", "qty":6, "unit":"m²", "price":None},
+                {"name":"Våtromsplater", "qty":6, "unit":"m²", "price":None},
+                {"name":"Flislim", "qty":20, "unit":"kg", "price":None},
+                {"name":"Fugemasse", "qty":10, "unit":"kg", "price":None},
+            ],
+            "workflow":[
+                {"task":"Membran og tetting", "hours":8},
+                {"task":"Flislegging", "hours":12},
+                {"task":"Montering innredning/utstyr", "hours":6},
+            ],
+            "crew":[
+                {"role":"Snekker","count":1},
+                {"role":"Elektriker","count":1},
+                {"role":"Rørlegger","count":1},
+            ],
+            "tools": tools_base(),
+        }
+
+    # INNVENDIG ISOLERING
+    elif re.search(r"(isolering|isolasjon|innvendig isolering)", text):
+        out = {
+            "materials":[
+                {"name":"Isolasjonsmateriale 100 mm", "qty":40, "unit":"m²", "price":None},
+                {"name":"Dampsperre", "qty":40, "unit":"m²", "price":None},
+                {"name":"Stenderverk", "qty":20, "unit":"lm", "price":None},
+                {"name":"Teip/klemlister", "qty":4, "unit":"stk", "price":None},
+            ],
+            "workflow":[
+                {"task":"Montering av stenderverk", "hours":6},
+                {"task":"Installasjon av isolasjon", "hours":8},
+                {"task":"Montering av dampsperre", "hours":6},
+            ],
+            "crew":[{"role":"Snekker","count":2}],
+            "tools": tools_base(),
+        }
+
+    # GARASJE su PLATE PÅ MARK
+    elif re.search(r"garasj", text) and re.search(r"(plate\s*p[åa]\s*mark|st[øo]p|betong)", text):
+        out = {
+            "materials":[
+                {"name":"Betong B30", "qty":5, "unit":"m³", "price":None},
+                {"name":"Armeringsnett", "qty":50, "unit":"m²", "price":None},
+                {"name":"EPS/XPS isolasjon", "qty":50, "unit":"m²", "price":None},
+                {"name":"Radonsperre", "qty":50, "unit":"m²", "price":None},
+                {"name":"Kantforskaling/kantlist", "qty":20, "unit":"lm", "price":None},
+            ],
+            "workflow":[
+                {"task":"Grunnarbeid og isolasjon", "hours":8},
+                {"task":"Forskaling og armering", "hours":10},
+                {"task":"Støp og etterbehandling", "hours":10},
+            ],
+            "crew":[{"role":"Betongarbeider","count":2}],
+            "tools":[
+                {"name":"Krysslaser","days":1.0},
+                {"name":"Vibroplate","days":1.0},
+                {"name":"Betongglatter/helikopter (opsjon)","days":1.0},
+            ],
+        }
+
+    # NUMATYTAS (fallback): paprastas santechn.
+    else:
+        out = {
+            "materials":[
+                {"name":"Terrassebord impregnert 28x120","qty":10,"unit":"m²","price":None},
+                {"name":"Bjelker/dragere C24","qty":35,"unit":"lm","price":None},
+                {"name":"Bjelkesko/beslag","qty":24,"unit":"stk","price":None},
+            ],
+            "workflow":[
+                {"task":"Oppmåling og fundamenter","hours":6},
+                {"task":"Bjelkelag og dragere","hours":8},
+                {"task":"Montering terrassebord","hours":10},
+            ],
+            "crew":[{"role":"Snekker","count":2}],
+            "tools": tools_base(),
+        }
+
+    # Tipizavimas + praplėtimai
+    out["materials"] = [Material(**m).dict() for m in out["materials"]]
+    out["workflow"]  = [Workflow(**w).dict() for w in out["workflow"]]
+    out["crew"]      = [Crew(**c).dict() for c in out["crew"]]
+    out["tools"]     = [Tool(**t).dict() for t in (out.get("tools") or tools_base())]
+
+    _enrich_tools(description, out)
+    _enrich_crew(description, out)
+    return out
+def _ensure_plate_betong(description: str, out: Dict[str, Any]) -> None:
+    import re
+    text = (description or "").lower()
+    if not re.search(r'(plate på mark|plate pa mark|st[øo]p|betongplate)', text):
+        return
+    mats = list(out.get("materials") or [])
+    # rasti jau esantį betono įrašą
+    idx = next((i for i,m in enumerate(mats)
+                if isinstance(m, dict) and 'betong' in (m.get('name') or '').lower()), -1)
+    if idx == -1:
+        mats.insert(0, {"name":"Betong B30","qty":1,"unit":"stk","price":None})
+    elif idx != 0:
+        mats.insert(0, mats.pop(idx))  # perkelti į pirmą poziciją
+    out["materials"] = mats
+
+    crew = list(out.get("crew") or [])
+    if not any(isinstance(c, dict) and (c.get("role") or "").lower()=="betongarbeider" for c in crew):
+        crew.append({"role":"Betongarbeider","count":1})
+    out["crew"] = crew
+def _ensure_plate_betong(description: str, out: Dict[str, Any]) -> None:
+    import re
+    text = (description or "").lower()
+    if not re.search(r'(plate på mark|plate pa mark|st[øo]p|betongplate)', text):
+        return
+    mats = list(out.get("materials") or [])
+    idx = next((i for i,m in enumerate(mats)
+                if isinstance(m, dict) and 'betong' in (m.get('name') or '').lower()), -1)
+    if idx == -1:
+        mats.insert(0, {"name":"Betong B30","qty":1,"unit":"stk","price":None})
+    elif idx != 0:
+        mats.insert(0, mats.pop(idx))
+    out["materials"] = mats
+    crew = list(out.get("crew") or [])
+    if not any(isinstance(c, dict) and (c.get("role") or "").lower()=="betongarbeider" for c in crew):
+        crew.append({"role":"Betongarbeider","count":1})
+    out["crew"] = crew
+# override: visada įterpk/move "Betong B30" į materials[0]
+def _ensure_plate_betong(description: str, out: Dict[str, Any]) -> None:
+    import re
+    text = (description or "").lower()
+    if not re.search(r'(plate på mark|plate pa mark|st[øo]p|betongplate)', text):
+        return
+    mats = list(out.get("materials") or [])
+    # ar jau turim "Betong B30"?
+    b30_idx = next((i for i,m in enumerate(mats)
+                    if isinstance(m, dict) and (m.get('name') or '').strip().lower() == 'betong b30'), -1)
+    if b30_idx == -1:
+        mats.insert(0, {"name":"Betong B30","qty":1,"unit":"stk","price":None})
+    elif b30_idx != 0:
+        mats.insert(0, mats.pop(b30_idx))
+    out["materials"] = mats
+
+    crew = list(out.get("crew") or [])
+    if not any(isinstance(c, dict) and (c.get("role") or "").lower()=="betongarbeider" for c in crew):
+        crew.append({"role":"Betongarbeider","count":1})
+    out["crew"] = crew

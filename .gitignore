@@ -1,6 +1,15 @@
-logs/
-logs/**/*
-*.pid
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.log
+
+# Env / secrets (realus raktas laikomas /etc/smartrp.env)
+.env
+.env.*
+smartrp.env
+*.secret
+
+# Editor/OS
+.vscode/
 .DS_Store

@@ -1,0 +1,48 @@
+from fastapi import APIRouter
+router = APIRouter(prefix="/api/estimate", tags=["estimate"])
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import Optional, Any, Dict
+import logging
+
+logger = logging.getLogger("estimate")
+router = APIRouter(prefix="/api/estimate", tags=["estimate"])
+
+class AnalyzeRequest(BaseModel):
+    description: str
+    locale: Optional[str] = "nb"
+
+def _expand_scope(desc: str, locale: str) -> str:
+    d = desc.lower()
+    if (("garasje" in d or "garasj" in d) and ("plate på mark" in d or "plate pa mark" in d or "slab" in d)):
+        desc += """
+Forstå at dette er komplett nybygg av garasje med plate på mark.
+Lag FULL liste: grunnarbeid/ringmur/plate (utgraving, pukk, EPS S80 100 mm, radonduk, armeringsnett K131, betong C25 100 mm, L-elementer),
+bindingsverk 48x148, vindsperre, isolasjon ~150 mm, dampsperre, kledning,
+takstoler, undertak/lekter, takpapp SBS, takrenner/nedløp,
+åpninger (leddport 2,4×2,1, ytterdør 9×21, 2 vinduer 10×10),
+festemateriell/småvarer. Fordel arbeid: betongarbeider + tømrer. Inkluder verktøy.
+"""
+    return desc
+
+def _safe_gpt_analyze(desc: str, locale: str) -> Dict[str, Any]:
+    try:
+        if '_analyze_with_gpt' in globals():
+            logger.info("estimate: calling GPT")
+            return _analyze_with_gpt(desc, locale)
+    except Exception:
+        logger.exception("estimate: GPT analyze failed, using fallback")
+
+    # Minimalus fallback, kad API nenumirtų
+    return {
+        "materials": [{"name": "Takpapp SBS", "unit": "m²", "qty": 120}],
+        "workflow": [{"task": "Taktekking papp", "hours": 8}],
+        "crew": [{"role": "Taktekker", "count": 2}],
+        "tools": ["Varmluftspistol", "Valsai"]
+    }
+
+@router.post("/analyze")
+async def analyze(req: AnalyzeRequest):
+    desc = _expand_scope(req.description, req.locale or "nb")
+    return _safe_gpt_analyze(desc, req.locale or "nb")
