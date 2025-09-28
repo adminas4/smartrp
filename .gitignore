@@ -13,3 +13,12 @@ smartrp.env
 # Editor/OS
 .vscode/
 .DS_Store
+
+# --- Frontend builds & deps ---
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/.cache/
+/frontend/.turbo/
+/frontend/coverage/
+*.map

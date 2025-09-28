@@ -1,0 +1,7 @@
+:root { --fab-offset: 80px; } /* jei dar liečiasi, didink iki 96–112px */
+#pwa-install, .pwa-install, [data-install-widget]{
+  position: fixed !important;
+  right: 16px !important;
+  bottom: calc(16px + env(safe-area-inset-bottom) + var(--fab-offset)) !important;
+  z-index: 2147483647 !important; /* virš tostu/banerių */
+}

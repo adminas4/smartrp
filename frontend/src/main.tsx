@@ -1,3 +1,4 @@
+import "./fab.css";
 import "./shims/suggest-compat.js";
 import "./shims/compat.js";
 import "./shims/runbomall.js";
