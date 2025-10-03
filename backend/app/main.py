@@ -3,10 +3,10 @@ from app.api import agent, estimate, pricing, progress, admin
 
 app = FastAPI()
 
-# Šitie routeriai naudoja savo prefix'us viduje
-for r in (agent.router, estimate.router, pricing.router, admin.router):
+# Pagrindiniai maršrutai (be papildomų prefiksų)
+for r in (estimate.router, pricing.router, progress.router, admin.router, agent.router):
     app.include_router(r)
 
-# Health montuojam ir be prefikso, ir su /api/progress
-app.include_router(progress.router)
+# Aliasai (kad veiktų ir /api/agent/ask bei /api/progress/healthz)
+app.include_router(agent.router,   prefix="/api")
 app.include_router(progress.router, prefix="/api/progress")
