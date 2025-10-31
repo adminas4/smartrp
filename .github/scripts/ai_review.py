@@ -1,4 +1,4 @@
-﻿import os, sys, subprocess, json, requests
+﻿import os`nimport sys`nimport subprocess`nimport json`nimport requests
 
 BASE = os.getenv("GITHUB_BASE_REF") or "master"
 subprocess.run(["git","fetch","origin", BASE], check=True)
@@ -43,3 +43,4 @@ except Exception as e:
     out = f"AI review failed: {e}"
 
 open("ai_review.md","w",encoding="utf-8").write(out)
+
